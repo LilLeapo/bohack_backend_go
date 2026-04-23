@@ -1,0 +1,5 @@
+.env
+.env.local
+*.log
+storage/registration_attachments/*
+!storage/registration_attachments/.gitkeep

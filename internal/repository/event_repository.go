@@ -4,15 +4,16 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 	"strings"
 	"time"
 
 	"bohack_backend_go/internal/models"
+
+	"gorm.io/gorm"
 )
 
 type EventRepository struct {
-	db *sql.DB
+	db *gorm.DB
 }
 
 type CreateEventParams struct {
@@ -34,248 +35,146 @@ type UpdateEventParams struct {
 	RegistrationCloseAt *time.Time
 }
 
-func NewEventRepository(db *sql.DB) *EventRepository {
+func NewEventRepository(db *gorm.DB) *EventRepository {
 	return &EventRepository{db: db}
 }
 
 func (r *EventRepository) GetByID(ctx context.Context, id int64) (*models.Event, error) {
-	row := r.db.QueryRowContext(ctx, eventSelectByClause(`id = $1`), id)
-	return scanEvent(row)
+	var event models.Event
+	if err := r.db.WithContext(ctx).Where("id = ?", id).Take(&event).Error; err != nil {
+		return nil, translateError(err)
+	}
+	return &event, nil
 }
 
 func (r *EventRepository) GetBySlug(ctx context.Context, slug string) (*models.Event, error) {
-	row := r.db.QueryRowContext(ctx, eventSelectByClause(`slug = $1`), slug)
-	return scanEvent(row)
+	var event models.Event
+	if err := r.db.WithContext(ctx).Where("slug = ?", slug).Take(&event).Error; err != nil {
+		return nil, translateError(err)
+	}
+	return &event, nil
 }
 
 func (r *EventRepository) GetPublicBySlug(ctx context.Context, slug string) (*models.Event, error) {
-	row := r.db.QueryRowContext(ctx, eventSelectByClause(`slug = $1 AND status = 'published'`), slug)
-	return scanEvent(row)
+	var event models.Event
+	if err := r.db.WithContext(ctx).
+		Where("slug = ? AND status = ?", slug, "published").
+		Take(&event).Error; err != nil {
+		return nil, translateError(err)
+	}
+	return &event, nil
 }
 
 func (r *EventRepository) GetCurrent(ctx context.Context, fallbackSlug string) (*models.Event, error) {
-	row := r.db.QueryRowContext(ctx, eventSelectByClause(`is_current = true AND status = 'published'`))
-	event, err := scanEvent(row)
+	var event models.Event
+	err := r.db.WithContext(ctx).
+		Where("is_current = ? AND status = ?", true, "published").
+		Take(&event).Error
 	if err == nil {
-		return event, nil
+		return &event, nil
 	}
-	if err != nil && !isNoRows(err) {
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, err
 	}
 
 	if strings.TrimSpace(fallbackSlug) != "" {
-		event, err = r.GetPublicBySlug(ctx, fallbackSlug)
-		if err == nil {
-			return event, nil
+		fallback, fallbackErr := r.GetPublicBySlug(ctx, fallbackSlug)
+		if fallbackErr == nil {
+			return fallback, nil
 		}
-		if err != nil && !isNoRows(err) {
-			return nil, err
+		if !errors.Is(fallbackErr, sql.ErrNoRows) {
+			return nil, fallbackErr
 		}
 	}
 
-	row = r.db.QueryRowContext(
-		ctx,
-		eventSelectBase()+`
-		WHERE status = 'published'
-		ORDER BY created_at DESC, id DESC
-		LIMIT 1
-	`,
-	)
-	return scanEvent(row)
+	if err := r.db.WithContext(ctx).
+		Where("status = ?", "published").
+		Order("created_at DESC, id DESC").
+		Take(&event).Error; err != nil {
+		return nil, translateError(err)
+	}
+	return &event, nil
 }
 
 func (r *EventRepository) ListPublic(ctx context.Context) ([]*models.Event, error) {
-	rows, err := r.db.QueryContext(
-		ctx,
-		eventSelectBase()+`
-		WHERE status = 'published'
-		ORDER BY is_current DESC, created_at DESC, id DESC
-		`,
-	)
-	if err != nil {
+	var events []*models.Event
+	if err := r.db.WithContext(ctx).
+		Where("status = ?", "published").
+		Order("is_current DESC, created_at DESC, id DESC").
+		Find(&events).Error; err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	return scanEventRows(rows)
+	return events, nil
 }
 
 func (r *EventRepository) List(ctx context.Context, status string) ([]*models.Event, error) {
-	query := eventSelectBase()
-	args := make([]any, 0, 1)
+	var events []*models.Event
+	tx := r.db.WithContext(ctx)
 	if status != "" {
-		args = append(args, status)
-		query += fmt.Sprintf(" WHERE status = $%d", len(args))
+		tx = tx.Where("status = ?", status)
 	}
-	query += " ORDER BY is_current DESC, created_at DESC, id DESC"
-
-	rows, err := r.db.QueryContext(ctx, query, args...)
-	if err != nil {
+	if err := tx.Order("is_current DESC, created_at DESC, id DESC").Find(&events).Error; err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	return scanEventRows(rows)
+	return events, nil
 }
 
 func (r *EventRepository) Create(ctx context.Context, params CreateEventParams) (*models.Event, error) {
 	now := time.Now().UTC()
+	event := models.Event{
+		Slug:                params.Slug,
+		Title:               params.Title,
+		Status:              params.Status,
+		IsCurrent:           params.IsCurrent,
+		RegistrationOpenAt:  params.RegistrationOpenAt,
+		RegistrationCloseAt: params.RegistrationCloseAt,
+		CreatedAt:           now,
+		UpdatedAt:           now,
+	}
 
-	tx, err := r.db.BeginTx(ctx, nil)
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if params.IsCurrent {
+			if err := tx.Model(&models.Event{}).
+				Where("is_current = ?", true).
+				Update("is_current", false).Error; err != nil {
+				return err
+			}
+		}
+		return tx.Create(&event).Error
+	})
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback()
 
-	if params.IsCurrent {
-		if _, err := tx.ExecContext(ctx, `UPDATE events SET is_current = false WHERE is_current = true`); err != nil {
-			return nil, err
-		}
-	}
-
-	var id int64
-	if err := tx.QueryRowContext(
-		ctx,
-		`
-		INSERT INTO events (
-			slug, title, status, is_current, registration_open_at, registration_close_at, created_at, updated_at
-		) VALUES (
-			$1, $2, $3, $4, $5, $6, $7, $7
-		)
-		RETURNING id
-		`,
-		params.Slug,
-		params.Title,
-		params.Status,
-		params.IsCurrent,
-		params.RegistrationOpenAt,
-		params.RegistrationCloseAt,
-		now,
-	).Scan(&id); err != nil {
-		return nil, err
-	}
-
-	if err := tx.Commit(); err != nil {
-		return nil, err
-	}
-
-	return r.GetByID(ctx, id)
+	return r.GetByID(ctx, event.ID)
 }
 
 func (r *EventRepository) Update(ctx context.Context, params UpdateEventParams) (*models.Event, error) {
 	now := time.Now().UTC()
 
-	tx, err := r.db.BeginTx(ctx, nil)
-	if err != nil {
-		return nil, err
-	}
-	defer tx.Rollback()
-
-	if params.IsCurrent {
-		if _, err := tx.ExecContext(ctx, `UPDATE events SET is_current = false WHERE is_current = true AND id <> $1`, params.ID); err != nil {
-			return nil, err
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if params.IsCurrent {
+			if err := tx.Model(&models.Event{}).
+				Where("is_current = ? AND id <> ?", true, params.ID).
+				Update("is_current", false).Error; err != nil {
+				return err
+			}
 		}
-	}
-
-	if _, err := tx.ExecContext(
-		ctx,
-		`
-		UPDATE events
-		SET slug = $1,
-			title = $2,
-			status = $3,
-			is_current = $4,
-			registration_open_at = $5,
-			registration_close_at = $6,
-			updated_at = $7
-		WHERE id = $8
-		`,
-		params.Slug,
-		params.Title,
-		params.Status,
-		params.IsCurrent,
-		params.RegistrationOpenAt,
-		params.RegistrationCloseAt,
-		now,
-		params.ID,
-	); err != nil {
-		return nil, err
-	}
-
-	if err := tx.Commit(); err != nil {
+		return tx.Model(&models.Event{}).
+			Where("id = ?", params.ID).
+			Updates(map[string]any{
+				"slug":                  params.Slug,
+				"title":                 params.Title,
+				"status":                params.Status,
+				"is_current":            params.IsCurrent,
+				"registration_open_at":  params.RegistrationOpenAt,
+				"registration_close_at": params.RegistrationCloseAt,
+				"updated_at":            now,
+			}).Error
+	})
+	if err != nil {
 		return nil, err
 	}
 
 	return r.GetByID(ctx, params.ID)
-}
-
-func eventSelectBase() string {
-	return `
-		SELECT
-			id,
-			slug,
-			title,
-			status,
-			is_current,
-			registration_open_at,
-			registration_close_at,
-			created_at,
-			updated_at
-		FROM events
-	`
-}
-
-func eventSelectByClause(where string) string {
-	return eventSelectBase() + `
-		WHERE ` + where + `
-		LIMIT 1
-	`
-}
-
-func scanEvent(scanner rowScanner) (*models.Event, error) {
-	var event models.Event
-	var openAt sql.NullTime
-	var closeAt sql.NullTime
-
-	if err := scanner.Scan(
-		&event.ID,
-		&event.Slug,
-		&event.Title,
-		&event.Status,
-		&event.IsCurrent,
-		&openAt,
-		&closeAt,
-		&event.CreatedAt,
-		&event.UpdatedAt,
-	); err != nil {
-		return nil, err
-	}
-
-	if openAt.Valid {
-		event.RegistrationOpenAt = &openAt.Time
-	}
-	if closeAt.Valid {
-		event.RegistrationCloseAt = &closeAt.Time
-	}
-
-	return &event, nil
-}
-
-func scanEventRows(rows *sql.Rows) ([]*models.Event, error) {
-	items := make([]*models.Event, 0)
-	for rows.Next() {
-		item, err := scanEvent(rows)
-		if err != nil {
-			return nil, err
-		}
-		items = append(items, item)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-func isNoRows(err error) bool {
-	return errors.Is(err, sql.ErrNoRows)
 }

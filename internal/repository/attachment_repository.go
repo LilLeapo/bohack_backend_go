@@ -2,14 +2,15 @@ package repository
 
 import (
 	"context"
-	"database/sql"
 	"time"
 
 	"bohack_backend_go/internal/models"
+
+	"gorm.io/gorm"
 )
 
 type AttachmentRepository struct {
-	db *sql.DB
+	db *gorm.DB
 }
 
 type CreateAttachmentParams struct {
@@ -21,79 +22,74 @@ type CreateAttachmentParams struct {
 	FileSize       int64
 }
 
-func NewAttachmentRepository(db *sql.DB) *AttachmentRepository {
+type attachmentRow struct {
+	ID             int64     `gorm:"column:id"`
+	RegistrationID int64     `gorm:"column:registration_id"`
+	UserID         int       `gorm:"column:user_id"`
+	Kind           string    `gorm:"column:kind"`
+	StoragePath    string    `gorm:"column:file_url"`
+	FileName       string    `gorm:"column:file_name"`
+	MimeType       string    `gorm:"column:mime_type"`
+	FileSize       int64     `gorm:"column:file_size"`
+	CreatedAt      time.Time `gorm:"column:created_at"`
+}
+
+func NewAttachmentRepository(db *gorm.DB) *AttachmentRepository {
 	return &AttachmentRepository{db: db}
 }
 
 func (r *AttachmentRepository) Create(ctx context.Context, params CreateAttachmentParams) (*models.RegistrationAttachment, error) {
 	now := time.Now().UTC()
-
-	var id int64
-	if err := r.db.QueryRowContext(
-		ctx,
-		`
-		INSERT INTO event_registration_attachments (
-			registration_id, kind, file_url, file_name, mime_type, file_size, created_at
-		) VALUES (
-			$1, $2, $3, $4, $5, $6, $7
-		)
-		RETURNING id
-		`,
-		params.RegistrationID,
-		params.Kind,
-		params.StoragePath,
-		params.FileName,
-		params.MimeType,
-		params.FileSize,
-		now,
-	).Scan(&id); err != nil {
+	attachment := models.RegistrationAttachment{
+		RegistrationID: params.RegistrationID,
+		Kind:           params.Kind,
+		StoragePath:    params.StoragePath,
+		FileName:       params.FileName,
+		MimeType:       params.MimeType,
+		FileSize:       params.FileSize,
+		CreatedAt:      now,
+	}
+	if err := r.db.WithContext(ctx).Create(&attachment).Error; err != nil {
 		return nil, err
 	}
-
-	return r.GetByID(ctx, id)
+	return r.GetByID(ctx, attachment.ID)
 }
 
 func (r *AttachmentRepository) GetByID(ctx context.Context, id int64) (*models.RegistrationAttachment, error) {
-	row := r.db.QueryRowContext(ctx, attachmentSelectByClause(`era.id = $1`), id)
-	return scanAttachment(row)
-}
-
-func (r *AttachmentRepository) ListByRegistration(ctx context.Context, registrationID int64) ([]*models.RegistrationAttachment, error) {
-	rows, err := r.db.QueryContext(
-		ctx,
-		attachmentSelectBase()+`
-		WHERE era.registration_id = $1
-		ORDER BY era.created_at ASC, era.id ASC
-		`,
-		registrationID,
-	)
+	rows, err := r.queryRows(ctx, "era.id = ?", []any{id}, "", 1)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	items := make([]*models.RegistrationAttachment, 0)
-	for rows.Next() {
-		item, err := scanAttachment(rows)
-		if err != nil {
-			return nil, err
-		}
-		items = append(items, item)
+	if len(rows) == 0 {
+		return nil, sqlNoRows()
 	}
-	if err := rows.Err(); err != nil {
+	item := rowToAttachment(rows[0])
+	return &item, nil
+}
+
+func (r *AttachmentRepository) ListByRegistration(ctx context.Context, registrationID int64) ([]*models.RegistrationAttachment, error) {
+	rows, err := r.queryRows(ctx, "era.registration_id = ?", []any{registrationID}, "era.created_at ASC, era.id ASC", 0)
+	if err != nil {
 		return nil, err
+	}
+	items := make([]*models.RegistrationAttachment, 0, len(rows))
+	for _, row := range rows {
+		item := rowToAttachment(row)
+		items = append(items, &item)
 	}
 	return items, nil
 }
 
 func (r *AttachmentRepository) Delete(ctx context.Context, id int64) error {
-	_, err := r.db.ExecContext(ctx, `DELETE FROM event_registration_attachments WHERE id = $1`, id)
-	return err
+	return r.db.WithContext(ctx).
+		Where("id = ?", id).
+		Delete(&models.RegistrationAttachment{}).Error
 }
 
-func attachmentSelectBase() string {
-	return `
-		SELECT
+func (r *AttachmentRepository) queryRows(ctx context.Context, where string, args []any, orderBy string, limit int) ([]attachmentRow, error) {
+	tx := r.db.WithContext(ctx).
+		Table("event_registration_attachments era").
+		Select(`
 			era.id,
 			era.registration_id,
 			er.user_id,
@@ -103,32 +99,36 @@ func attachmentSelectBase() string {
 			era.mime_type,
 			era.file_size,
 			era.created_at
-		FROM event_registration_attachments era
-		INNER JOIN event_registrations er ON er.id = era.registration_id
-	`
-}
+		`).
+		Joins("INNER JOIN event_registrations er ON er.id = era.registration_id")
 
-func attachmentSelectByClause(where string) string {
-	return attachmentSelectBase() + `
-		WHERE ` + where + `
-		LIMIT 1
-	`
-}
+	if where != "" {
+		tx = tx.Where(where, args...)
+	}
+	if orderBy != "" {
+		tx = tx.Order(orderBy)
+	}
+	if limit > 0 {
+		tx = tx.Limit(limit)
+	}
 
-func scanAttachment(scanner rowScanner) (*models.RegistrationAttachment, error) {
-	var attachment models.RegistrationAttachment
-	if err := scanner.Scan(
-		&attachment.ID,
-		&attachment.RegistrationID,
-		&attachment.UserID,
-		&attachment.Kind,
-		&attachment.StoragePath,
-		&attachment.FileName,
-		&attachment.MimeType,
-		&attachment.FileSize,
-		&attachment.CreatedAt,
-	); err != nil {
+	var rows []attachmentRow
+	if err := tx.Scan(&rows).Error; err != nil {
 		return nil, err
 	}
-	return &attachment, nil
+	return rows, nil
+}
+
+func rowToAttachment(row attachmentRow) models.RegistrationAttachment {
+	return models.RegistrationAttachment{
+		ID:             row.ID,
+		RegistrationID: row.RegistrationID,
+		UserID:         row.UserID,
+		Kind:           row.Kind,
+		StoragePath:    row.StoragePath,
+		FileName:       row.FileName,
+		MimeType:       row.MimeType,
+		FileSize:       row.FileSize,
+		CreatedAt:      row.CreatedAt,
+	}
 }

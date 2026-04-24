@@ -12,6 +12,7 @@ import (
 
 type Config struct {
 	Port                        string
+	DBDriver                    string
 	DatabaseURL                 string
 	JWTSecret                   string
 	AccessTokenTTL              time.Duration
@@ -32,9 +33,12 @@ type Config struct {
 }
 
 func Load() (Config, error) {
+	driver := normalizeDriver(envOrDefault("DB_DRIVER", "postgres"))
+
 	cfg := Config{
 		Port:              envOrDefault("PORT", "8080"),
-		DatabaseURL:       databaseURL(),
+		DBDriver:          driver,
+		DatabaseURL:       databaseURL(driver),
 		JWTSecret:         os.Getenv("JWT_SECRET"),
 		DefaultEventSlug:  envOrDefault("DEFAULT_EVENT_SLUG", "bohack-2026"),
 		DefaultEventTitle: envOrDefault("DEFAULT_EVENT_TITLE", "BoHack 2026"),
@@ -48,7 +52,12 @@ func Load() (Config, error) {
 	}
 
 	if cfg.DatabaseURL == "" {
-		return Config{}, errors.New("DATABASE_URL or PG* environment variables are required")
+		switch cfg.DBDriver {
+		case "sqlite":
+			return Config{}, errors.New("SQLITE_PATH or DATABASE_URL is required when DB_DRIVER=sqlite")
+		default:
+			return Config{}, errors.New("DATABASE_URL or PG* environment variables are required")
+		}
 	}
 	if cfg.JWTSecret == "" {
 		return Config{}, errors.New("JWT_SECRET is required")
@@ -123,9 +132,17 @@ func Load() (Config, error) {
 	return cfg, nil
 }
 
-func databaseURL() string {
+func databaseURL(driver string) string {
 	if raw := os.Getenv("DATABASE_URL"); raw != "" {
 		return raw
+	}
+
+	if driver == "sqlite" {
+		path := strings.TrimSpace(os.Getenv("SQLITE_PATH"))
+		if path == "" {
+			return ""
+		}
+		return path
 	}
 
 	host := os.Getenv("PGHOST")
@@ -150,6 +167,17 @@ func databaseURL() string {
 	u.RawQuery = q.Encode()
 
 	return u.String()
+}
+
+func normalizeDriver(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "sqlite", "sqlite3":
+		return "sqlite"
+	case "", "postgres", "postgresql", "pg":
+		return "postgres"
+	default:
+		return strings.ToLower(strings.TrimSpace(raw))
+	}
 }
 
 func parseAllowedOrigins(raw string) []string {

@@ -10,10 +10,12 @@ import (
 	"time"
 
 	"bohack_backend_go/internal/models"
+
+	"gorm.io/gorm"
 )
 
 type UserRepository struct {
-	db *sql.DB
+	db *gorm.DB
 }
 
 type UpdateUserProfileParams struct {
@@ -23,13 +25,16 @@ type UpdateUserProfileParams struct {
 	Phone     *string
 }
 
-func NewUserRepository(db *sql.DB) *UserRepository {
+func NewUserRepository(db *gorm.DB) *UserRepository {
 	return &UserRepository{db: db}
 }
 
 func (r *UserRepository) GetByID(ctx context.Context, uid int) (*models.User, error) {
-	row := r.db.QueryRowContext(ctx, userSelectByClause(`uid = $1`), uid)
-	return scanUser(row)
+	var user models.User
+	if err := r.db.WithContext(ctx).Where("uid = ?", uid).Take(&user).Error; err != nil {
+		return nil, translateError(err)
+	}
+	return &user, nil
 }
 
 func (r *UserRepository) GetByLogin(ctx context.Context, username, email string) (*models.User, error) {
@@ -65,65 +70,33 @@ func (r *UserRepository) GetByLogin(ctx context.Context, username, email string)
 }
 
 func (r *UserRepository) ExistsByUsername(ctx context.Context, username string) (bool, error) {
-	return r.exists(ctx, `SELECT EXISTS (SELECT 1 FROM users WHERE username = $1)`, strings.TrimSpace(username))
+	return r.exists(ctx, "username = ?", strings.TrimSpace(username))
 }
 
 func (r *UserRepository) ExistsByEmail(ctx context.Context, email string) (bool, error) {
-	return r.exists(ctx, `SELECT EXISTS (SELECT 1 FROM users WHERE email = $1)`, strings.TrimSpace(strings.ToLower(email)))
+	return r.exists(ctx, "email = ?", strings.TrimSpace(strings.ToLower(email)))
 }
 
 func (r *UserRepository) ExistsByUID(ctx context.Context, uid int) (bool, error) {
-	return r.exists(ctx, `SELECT EXISTS (SELECT 1 FROM users WHERE uid = $1)`, uid)
+	return r.exists(ctx, "uid = ?", uid)
 }
 
 func (r *UserRepository) Create(ctx context.Context, user *models.User) error {
-	_, err := r.db.ExecContext(
-		ctx,
-		`
-		INSERT INTO users (
-			uid, username, email, password_hash, avatar_url, bio, phone,
-			is_admin, role, bk_balance, team_id, created_at, updated_at
-		) VALUES (
-			$1, $2, $3, $4, $5, $6, $7,
-			$8, $9, $10, $11, $12, $13
-		)
-		`,
-		user.UID,
-		user.Username,
-		user.Email,
-		user.PasswordHash,
-		user.AvatarURL,
-		user.Bio,
-		user.Phone,
-		user.IsAdmin,
-		user.Role,
-		user.BKBalance,
-		user.TeamID,
-		user.CreatedAt,
-		user.UpdatedAt,
-	)
-	return err
+	return r.db.WithContext(ctx).Create(user).Error
 }
 
 func (r *UserRepository) UpdateProfile(ctx context.Context, params UpdateUserProfileParams) (*models.User, error) {
 	now := time.Now().UTC()
 
-	if _, err := r.db.ExecContext(
-		ctx,
-		`
-		UPDATE users
-		SET avatar_url = $1,
-			bio = $2,
-			phone = $3,
-			updated_at = $4
-		WHERE uid = $5
-		`,
-		params.AvatarURL,
-		params.Bio,
-		params.Phone,
-		now,
-		params.UID,
-	); err != nil {
+	if err := r.db.WithContext(ctx).
+		Model(&models.User{}).
+		Where("uid = ?", params.UID).
+		Updates(map[string]any{
+			"avatar_url": params.AvatarURL,
+			"bio":        params.Bio,
+			"phone":      params.Phone,
+			"updated_at": now,
+		}).Error; err != nil {
 		return nil, err
 	}
 
@@ -131,36 +104,23 @@ func (r *UserRepository) UpdateProfile(ctx context.Context, params UpdateUserPro
 }
 
 func (r *UserRepository) UpdateRole(ctx context.Context, uid int, role string) error {
-	_, err := r.db.ExecContext(
-		ctx,
-		`
-		UPDATE users
-		SET role = $1,
-			updated_at = $2
-		WHERE uid = $3
-		  AND is_admin = false
-		`,
-		role,
-		time.Now().UTC(),
-		uid,
-	)
-	return err
+	return r.db.WithContext(ctx).
+		Model(&models.User{}).
+		Where("uid = ? AND is_admin = ?", uid, false).
+		Updates(map[string]any{
+			"role":       role,
+			"updated_at": time.Now().UTC(),
+		}).Error
 }
 
 func (r *UserRepository) UpdatePassword(ctx context.Context, uid int, passwordHash string) error {
-	_, err := r.db.ExecContext(
-		ctx,
-		`
-		UPDATE users
-		SET password_hash = $1,
-			updated_at = $2
-		WHERE uid = $3
-		`,
-		passwordHash,
-		time.Now().UTC(),
-		uid,
-	)
-	return err
+	return r.db.WithContext(ctx).
+		Model(&models.User{}).
+		Where("uid = ?", uid).
+		Updates(map[string]any{
+			"password_hash": passwordHash,
+			"updated_at":    time.Now().UTC(),
+		}).Error
 }
 
 func (r *UserRepository) GenerateUID(ctx context.Context) (int, error) {
@@ -182,77 +142,30 @@ func (r *UserRepository) GenerateUID(ctx context.Context) (int, error) {
 	return 0, errors.New("unable to generate unique uid")
 }
 
-func (r *UserRepository) exists(ctx context.Context, query string, arg any) (bool, error) {
-	var exists bool
-	if err := r.db.QueryRowContext(ctx, query, arg).Scan(&exists); err != nil {
+func (r *UserRepository) exists(ctx context.Context, where string, arg any) (bool, error) {
+	var count int64
+	if err := r.db.WithContext(ctx).
+		Model(&models.User{}).
+		Where(where, arg).
+		Limit(1).
+		Count(&count).Error; err != nil {
 		return false, err
 	}
-	return exists, nil
+	return count > 0, nil
 }
 
 func (r *UserRepository) getByUsername(ctx context.Context, username string) (*models.User, error) {
-	row := r.db.QueryRowContext(ctx, userSelectByClause(`username = $1`), username)
-	return scanUser(row)
+	var user models.User
+	if err := r.db.WithContext(ctx).Where("username = ?", username).Take(&user).Error; err != nil {
+		return nil, translateError(err)
+	}
+	return &user, nil
 }
 
 func (r *UserRepository) getByEmail(ctx context.Context, email string) (*models.User, error) {
-	row := r.db.QueryRowContext(ctx, userSelectByClause(`email = $1`), email)
-	return scanUser(row)
-}
-
-func userSelectByClause(where string) string {
-	return `
-		SELECT
-			uid, username, email, password_hash, avatar_url, bio, phone,
-			is_admin, role, bk_balance, team_id, created_at, updated_at
-		FROM users
-		WHERE ` + where + `
-		LIMIT 1
-	`
-}
-
-type rowScanner interface {
-	Scan(dest ...any) error
-}
-
-func scanUser(scanner rowScanner) (*models.User, error) {
 	var user models.User
-	var avatarURL sql.NullString
-	var bio sql.NullString
-	var phone sql.NullString
-	var teamID sql.NullInt64
-
-	if err := scanner.Scan(
-		&user.UID,
-		&user.Username,
-		&user.Email,
-		&user.PasswordHash,
-		&avatarURL,
-		&bio,
-		&phone,
-		&user.IsAdmin,
-		&user.Role,
-		&user.BKBalance,
-		&teamID,
-		&user.CreatedAt,
-		&user.UpdatedAt,
-	); err != nil {
-		return nil, err
+	if err := r.db.WithContext(ctx).Where("email = ?", email).Take(&user).Error; err != nil {
+		return nil, translateError(err)
 	}
-
-	if avatarURL.Valid {
-		user.AvatarURL = &avatarURL.String
-	}
-	if bio.Valid {
-		user.Bio = &bio.String
-	}
-	if phone.Valid {
-		user.Phone = &phone.String
-	}
-	if teamID.Valid {
-		value := int(teamID.Int64)
-		user.TeamID = &value
-	}
-
 	return &user, nil
 }

@@ -35,21 +35,25 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	sqlDB, err := db.Open(ctx, cfg)
+	gormDB, err := db.Open(ctx, cfg)
 	if err != nil {
 		log.Fatalf("open database: %v", err)
 	}
-	defer sqlDB.Close()
+	defer func() {
+		if err := db.Close(gormDB); err != nil {
+			log.Printf("close database: %v", err)
+		}
+	}()
 
-	if err := db.EnsureSchema(ctx, sqlDB, cfg); err != nil {
+	if err := db.EnsureSchema(ctx, gormDB, cfg); err != nil {
 		log.Fatalf("ensure schema: %v", err)
 	}
 
-	userRepo := repository.NewUserRepository(sqlDB)
-	eventRepo := repository.NewEventRepository(sqlDB)
-	registrationRepo := repository.NewRegistrationRepository(sqlDB)
-	attachmentRepo := repository.NewAttachmentRepository(sqlDB)
-	verificationCodeRepo := repository.NewVerificationCodeRepository(sqlDB)
+	userRepo := repository.NewUserRepository(gormDB)
+	eventRepo := repository.NewEventRepository(gormDB)
+	registrationRepo := repository.NewRegistrationRepository(gormDB)
+	attachmentRepo := repository.NewAttachmentRepository(gormDB)
+	verificationCodeRepo := repository.NewVerificationCodeRepository(gormDB)
 
 	tokenManager := auth.NewTokenManager(cfg.JWTSecret, cfg.AccessTokenTTL)
 	var authMailer mailer.Mailer

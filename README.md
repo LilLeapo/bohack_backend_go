@@ -1,5 +1,6 @@
 # BoHack Backend (Go)
 
+zq到此一游
 当前 Go 后端已实现：
 
 - 用户注册

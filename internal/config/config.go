@@ -18,6 +18,7 @@ type Config struct {
 	AccessTokenTTL              time.Duration
 	DefaultEventSlug            string
 	DefaultEventTitle           string
+	FrontendBaseURL             string
 	AllowedOrigins              []string
 	AttachmentDir               string
 	MaxUploadBytes              int64
@@ -29,6 +30,7 @@ type Config struct {
 	SMTPFrom                    string
 	VerificationTTL             time.Duration
 	VerificationGap             time.Duration
+	AttendanceConfirmationTTL   time.Duration
 	RequireRegisterVerification bool
 }
 
@@ -42,6 +44,7 @@ func Load() (Config, error) {
 		JWTSecret:         os.Getenv("JWT_SECRET"),
 		DefaultEventSlug:  envOrDefault("DEFAULT_EVENT_SLUG", "bohack-2026"),
 		DefaultEventTitle: envOrDefault("DEFAULT_EVENT_TITLE", "BoHack 2026"),
+		FrontendBaseURL:   strings.TrimRight(envOrDefault("FRONTEND_BASE_URL", "http://127.0.0.1:5173"), "/"),
 		AllowedOrigins:    parseAllowedOrigins(envOrDefault("ALLOWED_ORIGINS", "*")),
 		AttachmentDir:     envOrDefault("ATTACHMENT_DIR", "./storage/registration_attachments"),
 		MailMode:          strings.ToLower(envOrDefault("MAIL_MODE", "console")),
@@ -107,6 +110,15 @@ func Load() (Config, error) {
 		return Config{}, errors.New("VERIFICATION_CODE_MIN_INTERVAL_SECONDS must be 0 or greater")
 	}
 	cfg.VerificationGap = time.Duration(verifyGapSeconds) * time.Second
+
+	attendanceTTLHours, err := strconv.Atoi(envOrDefault("ATTENDANCE_CONFIRMATION_EXPIRE_HOURS", "168"))
+	if err != nil {
+		return Config{}, fmt.Errorf("invalid ATTENDANCE_CONFIRMATION_EXPIRE_HOURS: %w", err)
+	}
+	if attendanceTTLHours <= 0 {
+		return Config{}, errors.New("ATTENDANCE_CONFIRMATION_EXPIRE_HOURS must be greater than 0")
+	}
+	cfg.AttendanceConfirmationTTL = time.Duration(attendanceTTLHours) * time.Hour
 
 	requireRegisterVerification, err := strconv.ParseBool(envOrDefault("REQUIRE_REGISTER_VERIFICATION", "false"))
 	if err != nil {

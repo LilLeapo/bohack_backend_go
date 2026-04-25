@@ -121,7 +121,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	req.VerificationCode = firstNonEmpty(req.VerificationCode, req.VerificationCode2)
 
 	switch {
-	case len(req.Username) < 1 || len(req.Username) > 50:
+	case req.Username == "" || tooLong(req.Username, 50):
 		httpx.Error(w, http.StatusBadRequest, 42201, "username must be between 1 and 50 characters")
 		return
 	case req.Email == "":

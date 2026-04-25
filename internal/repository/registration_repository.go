@@ -47,6 +47,21 @@ type UpdateRegistrationSubmissionParams struct {
 	Extra          json.RawMessage
 }
 
+type AdminUpdateRegistrationParams struct {
+	ID             int64
+	RealName       string
+	Phone          string
+	EmailSnapshot  string
+	School         *string
+	Company        *string
+	Bio            *string
+	TeamName       *string
+	RolePreference *string
+	Source         *string
+	Note           *string
+	Extra          json.RawMessage
+}
+
 type ReviewRegistrationParams struct {
 	ID         int64
 	UserID     int
@@ -63,30 +78,30 @@ type ListRegistrationsParams struct {
 }
 
 type registrationRow struct {
-	ID             int64           `gorm:"column:id"`
-	EventID        int64           `gorm:"column:event_id"`
-	EventSlug      string          `gorm:"column:event_slug"`
-	EventTitle     string          `gorm:"column:event_title"`
-	UserID         int             `gorm:"column:user_id"`
-	Username       *string         `gorm:"column:username"`
-	Status         string          `gorm:"column:status"`
-	RealName       string          `gorm:"column:real_name"`
-	Phone          string          `gorm:"column:phone"`
-	EmailSnapshot  string          `gorm:"column:email_snapshot"`
-	School         *string         `gorm:"column:school"`
-	Company        *string         `gorm:"column:company"`
-	Bio            *string         `gorm:"column:bio"`
-	TeamName       *string         `gorm:"column:team_name"`
-	RolePreference *string         `gorm:"column:role_preference"`
-	Source         *string         `gorm:"column:source"`
-	Note           *string         `gorm:"column:note"`
-	Extra          models.JSONB    `gorm:"column:extra"`
-	SubmittedAt    time.Time       `gorm:"column:submitted_at"`
-	ReviewedAt     *time.Time      `gorm:"column:reviewed_at"`
-	ReviewedBy     *int            `gorm:"column:reviewed_by"`
-	ReviewNote     *string         `gorm:"column:review_note"`
-	CreatedAt      time.Time       `gorm:"column:created_at"`
-	UpdatedAt      time.Time       `gorm:"column:updated_at"`
+	ID             int64        `gorm:"column:id"`
+	EventID        int64        `gorm:"column:event_id"`
+	EventSlug      string       `gorm:"column:event_slug"`
+	EventTitle     string       `gorm:"column:event_title"`
+	UserID         int          `gorm:"column:user_id"`
+	Username       *string      `gorm:"column:username"`
+	Status         string       `gorm:"column:status"`
+	RealName       string       `gorm:"column:real_name"`
+	Phone          string       `gorm:"column:phone"`
+	EmailSnapshot  string       `gorm:"column:email_snapshot"`
+	School         *string      `gorm:"column:school"`
+	Company        *string      `gorm:"column:company"`
+	Bio            *string      `gorm:"column:bio"`
+	TeamName       *string      `gorm:"column:team_name"`
+	RolePreference *string      `gorm:"column:role_preference"`
+	Source         *string      `gorm:"column:source"`
+	Note           *string      `gorm:"column:note"`
+	Extra          models.JSONB `gorm:"column:extra"`
+	SubmittedAt    time.Time    `gorm:"column:submitted_at"`
+	ReviewedAt     *time.Time   `gorm:"column:reviewed_at"`
+	ReviewedBy     *int         `gorm:"column:reviewed_by"`
+	ReviewNote     *string      `gorm:"column:review_note"`
+	CreatedAt      time.Time    `gorm:"column:created_at"`
+	UpdatedAt      time.Time    `gorm:"column:updated_at"`
 }
 
 func NewRegistrationRepository(db *gorm.DB) *RegistrationRepository {
@@ -185,6 +200,32 @@ func (r *RegistrationRepository) UpdateSubmission(ctx context.Context, params Up
 			}).Error
 	})
 	if err != nil {
+		return nil, err
+	}
+
+	return r.GetByID(ctx, params.ID)
+}
+
+func (r *RegistrationRepository) AdminUpdate(ctx context.Context, params AdminUpdateRegistrationParams) (*models.Registration, error) {
+	now := time.Now().UTC()
+	extra := normalizeExtra(params.Extra)
+
+	if err := r.db.WithContext(ctx).Model(&models.Registration{}).
+		Where("id = ?", params.ID).
+		Updates(map[string]any{
+			"real_name":       params.RealName,
+			"phone":           params.Phone,
+			"email_snapshot":  params.EmailSnapshot,
+			"school":          params.School,
+			"company":         params.Company,
+			"bio":             params.Bio,
+			"team_name":       params.TeamName,
+			"role_preference": params.RolePreference,
+			"source":          params.Source,
+			"note":            params.Note,
+			"extra":           extra,
+			"updated_at":      now,
+		}).Error; err != nil {
 		return nil, err
 	}
 

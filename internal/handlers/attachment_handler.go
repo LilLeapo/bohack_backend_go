@@ -153,7 +153,7 @@ func (h *AttachmentHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	if kind == "" {
 		kind = "attachment"
 	}
-	if len(kind) > 50 {
+	if tooLong(kind, 50) {
 		httpx.Error(w, http.StatusBadRequest, 42261, "kind must be 50 characters or fewer")
 		return
 	}

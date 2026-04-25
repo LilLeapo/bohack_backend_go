@@ -25,6 +25,26 @@ type UpdateUserProfileParams struct {
 	Phone     *string
 }
 
+type ListUsersParams struct {
+	Query    string
+	Role     string
+	Page     int
+	PageSize int
+}
+
+type AdminUpdateUserParams struct {
+	UID       int
+	Username  string
+	Email     string
+	AvatarURL *string
+	Bio       *string
+	Phone     *string
+	IsAdmin   bool
+	Role      string
+	BKBalance float64
+	TeamID    *int
+}
+
 func NewUserRepository(db *gorm.DB) *UserRepository {
 	return &UserRepository{db: db}
 }
@@ -96,6 +116,62 @@ func (r *UserRepository) UpdateProfile(ctx context.Context, params UpdateUserPro
 			"bio":        params.Bio,
 			"phone":      params.Phone,
 			"updated_at": now,
+		}).Error; err != nil {
+		return nil, err
+	}
+
+	return r.GetByID(ctx, params.UID)
+}
+
+func (r *UserRepository) List(ctx context.Context, params ListUsersParams) ([]*models.User, int, error) {
+	if params.Page <= 0 {
+		params.Page = 1
+	}
+	if params.PageSize <= 0 {
+		params.PageSize = 20
+	}
+
+	tx := r.db.WithContext(ctx).Model(&models.User{})
+	if params.Role != "" {
+		tx = tx.Where("role = ?", params.Role)
+	}
+	if params.Query != "" {
+		like := "%" + strings.ToLower(strings.TrimSpace(params.Query)) + "%"
+		tx = tx.Where("LOWER(username) LIKE ? OR LOWER(email) LIKE ? OR phone LIKE ?", like, like, "%"+params.Query+"%")
+	}
+
+	var total int64
+	if err := tx.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	var users []*models.User
+	offset := (params.Page - 1) * params.PageSize
+	if err := tx.Order("created_at DESC, uid DESC").
+		Limit(params.PageSize).
+		Offset(offset).
+		Find(&users).Error; err != nil {
+		return nil, 0, err
+	}
+
+	return users, int(total), nil
+}
+
+func (r *UserRepository) AdminUpdate(ctx context.Context, params AdminUpdateUserParams) (*models.User, error) {
+	if err := r.db.WithContext(ctx).
+		Model(&models.User{}).
+		Where("uid = ?", params.UID).
+		Updates(map[string]any{
+			"username":   params.Username,
+			"email":      params.Email,
+			"avatar_url": params.AvatarURL,
+			"bio":        params.Bio,
+			"phone":      params.Phone,
+			"is_admin":   params.IsAdmin,
+			"role":       params.Role,
+			"bk_balance": params.BKBalance,
+			"team_id":    params.TeamID,
+			"updated_at": time.Now().UTC(),
 		}).Error; err != nil {
 		return nil, err
 	}

@@ -4,9 +4,11 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"bohack_backend_go/internal/httpx"
 	"bohack_backend_go/internal/models"
@@ -227,6 +229,41 @@ func (h *RegistrationHandler) Status(w http.ResponseWriter, r *http.Request) {
 	httpx.OK(w, registration, "OK")
 }
 
+func (h *RegistrationHandler) Certificate(w http.ResponseWriter, r *http.Request) {
+	user := httpx.CurrentUser(r)
+	if user == nil {
+		httpx.Error(w, http.StatusUnauthorized, 40115, "unauthorized")
+		return
+	}
+
+	eventSlug := readEventSlugFromQuery(r, h.defaultSlug)
+	event, ok := h.loadEvent(w, r, eventSlug, 40403, 50014)
+	if !ok {
+		return
+	}
+
+	registration, err := h.registrations.GetByUserAndEvent(r.Context(), user.UID, event.ID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			httpx.Error(w, http.StatusNotFound, 40404, "registration not found")
+			return
+		}
+		httpx.Error(w, http.StatusInternalServerError, 50015, "failed to load registration")
+		return
+	}
+
+	filename := fmt.Sprintf("bohack-%d-certificate.txt", registration.ID)
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
+	w.WriteHeader(http.StatusOK)
+	_, _ = fmt.Fprintf(w, "BoHack 2026 Registration Certificate\n\n")
+	_, _ = fmt.Fprintf(w, "Application ID: BH26-%04d\n", registration.ID)
+	_, _ = fmt.Fprintf(w, "Name: %s\n", registration.RealName)
+	_, _ = fmt.Fprintf(w, "Event: %s\n", registration.EventTitle)
+	_, _ = fmt.Fprintf(w, "Status: %s\n", registration.Status)
+	_, _ = fmt.Fprintf(w, "Submitted At: %s\n", registration.SubmittedAt.Format(time.RFC3339))
+}
+
 type validatedRegistrationPayload struct {
 	EventSlug      string
 	RealName       string
@@ -275,28 +312,28 @@ func (h *RegistrationHandler) decodeValidatedPayload(w http.ResponseWriter, r *h
 	case payload.Phone == "":
 		httpx.Error(w, http.StatusBadRequest, 42211, "phone is required")
 		return validatedRegistrationPayload{}, false
-	case len(payload.RealName) > 100:
+	case tooLong(payload.RealName, 100):
 		httpx.Error(w, http.StatusBadRequest, 42213, "real_name must be 100 characters or fewer")
 		return validatedRegistrationPayload{}, false
-	case len(payload.Phone) > 32:
+	case tooLong(payload.Phone, 32):
 		httpx.Error(w, http.StatusBadRequest, 42214, "phone must be 32 characters or fewer")
 		return validatedRegistrationPayload{}, false
-	case len(payload.School) > 255:
+	case tooLong(payload.School, 255):
 		httpx.Error(w, http.StatusBadRequest, 42216, "school must be 255 characters or fewer")
 		return validatedRegistrationPayload{}, false
-	case len(payload.Company) > 255:
+	case tooLong(payload.Company, 255):
 		httpx.Error(w, http.StatusBadRequest, 42217, "company must be 255 characters or fewer")
 		return validatedRegistrationPayload{}, false
-	case len(payload.TeamName) > 255:
+	case tooLong(payload.TeamName, 255):
 		httpx.Error(w, http.StatusBadRequest, 42218, "team_name must be 255 characters or fewer")
 		return validatedRegistrationPayload{}, false
-	case len(payload.RolePreference) > 50:
+	case tooLong(payload.RolePreference, 50):
 		httpx.Error(w, http.StatusBadRequest, 42219, "role_preference must be 50 characters or fewer")
 		return validatedRegistrationPayload{}, false
-	case len(payload.Source) > 100:
+	case tooLong(payload.Source, 100):
 		httpx.Error(w, http.StatusBadRequest, 42223, "source must be 100 characters or fewer")
 		return validatedRegistrationPayload{}, false
-	case len(payload.Note) > 5000:
+	case tooLong(payload.Note, 5000):
 		httpx.Error(w, http.StatusBadRequest, 42215, "note must be 5000 characters or fewer")
 		return validatedRegistrationPayload{}, false
 	}
@@ -380,6 +417,10 @@ func registrationAllowsAttachmentChanges(status string) bool {
 	default:
 		return false
 	}
+}
+
+func tooLong(value string, maxRunes int) bool {
+	return utf8.RuneCountInString(value) > maxRunes
 }
 
 func readEventSlugFromQuery(r *http.Request, fallback string) string {

@@ -60,13 +60,13 @@ func (h *ProfileHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	switch {
-	case avatarURL != nil && len(*avatarURL) > 500:
+	case avatarURL != nil && tooLong(*avatarURL, 500):
 		httpx.Error(w, http.StatusBadRequest, 42220, "avatar_url must be 500 characters or fewer")
 		return
-	case bio != nil && len(*bio) > 5000:
+	case bio != nil && tooLong(*bio, 5000):
 		httpx.Error(w, http.StatusBadRequest, 42221, "bio must be 5000 characters or fewer")
 		return
-	case phone != nil && len(*phone) > 32:
+	case phone != nil && tooLong(*phone, 32):
 		httpx.Error(w, http.StatusBadRequest, 42222, "phone must be 32 characters or fewer")
 		return
 	}

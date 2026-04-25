@@ -251,13 +251,13 @@ func validateNormalizedEventPayload(w http.ResponseWriter, payload normalizedEve
 	case !eventSlugPattern.MatchString(payload.Slug):
 		httpx.Error(w, http.StatusBadRequest, 42245, "slug must contain only lowercase letters, numbers, hyphen, or underscore")
 		return normalizedEventPayload{}, false
-	case len(payload.Slug) > 100:
+	case tooLong(payload.Slug, 100):
 		httpx.Error(w, http.StatusBadRequest, 42246, "slug must be 100 characters or fewer")
 		return normalizedEventPayload{}, false
 	case payload.Title == "":
 		httpx.Error(w, http.StatusBadRequest, 42247, "title is required")
 		return normalizedEventPayload{}, false
-	case len(payload.Title) > 255:
+	case tooLong(payload.Title, 255):
 		httpx.Error(w, http.StatusBadRequest, 42248, "title must be 255 characters or fewer")
 		return normalizedEventPayload{}, false
 	case !isAllowedEventStatus(payload.Status):

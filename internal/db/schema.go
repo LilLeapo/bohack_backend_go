@@ -20,6 +20,7 @@ func EnsureSchema(ctx context.Context, gormDB *gorm.DB, cfg config.Config) error
 		&models.Event{},
 		&models.Registration{},
 		&models.RegistrationAttachment{},
+		&models.AttendanceConfirmation{},
 	); err != nil {
 		return err
 	}
@@ -111,6 +112,24 @@ func applyPostgresPostMigrate(tx *gorm.DB) error {
 		END $$;`,
 		`DO $$ BEGIN
 			IF NOT EXISTS (
+				SELECT 1 FROM pg_constraint WHERE conname = 'attendance_confirmations_registration_id_fkey'
+			) THEN
+				ALTER TABLE attendance_confirmations
+					ADD CONSTRAINT attendance_confirmations_registration_id_fkey
+					FOREIGN KEY (registration_id) REFERENCES event_registrations(id) ON DELETE CASCADE;
+			END IF;
+		END $$;`,
+		`DO $$ BEGIN
+			IF NOT EXISTS (
+				SELECT 1 FROM pg_constraint WHERE conname = 'attendance_confirmations_user_id_fkey'
+			) THEN
+				ALTER TABLE attendance_confirmations
+					ADD CONSTRAINT attendance_confirmations_user_id_fkey
+					FOREIGN KEY (user_id) REFERENCES users(uid) ON DELETE CASCADE;
+			END IF;
+		END $$;`,
+		`DO $$ BEGIN
+			IF NOT EXISTS (
 				SELECT 1 FROM pg_constraint WHERE conname = 'events_status_check'
 			) THEN
 				ALTER TABLE events
@@ -125,6 +144,15 @@ func applyPostgresPostMigrate(tx *gorm.DB) error {
 				ALTER TABLE event_registrations
 					ADD CONSTRAINT event_registrations_status_check
 					CHECK (status IN ('draft', 'submitted', 'under_review', 'approved', 'rejected', 'cancelled'));
+			END IF;
+		END $$;`,
+		`DO $$ BEGIN
+			IF NOT EXISTS (
+				SELECT 1 FROM pg_constraint WHERE conname = 'attendance_confirmations_status_check'
+			) THEN
+				ALTER TABLE attendance_confirmations
+					ADD CONSTRAINT attendance_confirmations_status_check
+					CHECK (status IN ('pending', 'confirmed', 'declined'));
 			END IF;
 		END $$;`,
 	}

@@ -10,6 +10,7 @@ import (
 
 type Mailer interface {
 	SendVerificationCode(ctx context.Context, email, code, codeType string) error
+	SendAttendanceConfirmation(ctx context.Context, email, name, eventTitle, confirmURL, declineURL string) error
 	Mode() string
 }
 
@@ -21,6 +22,11 @@ func NewConsoleMailer() Mailer {
 
 func (m *ConsoleMailer) SendVerificationCode(_ context.Context, email, code, codeType string) error {
 	log.Printf("[mail:console] send verification code email=%s type=%s code=%s", email, codeType, code)
+	return nil
+}
+
+func (m *ConsoleMailer) SendAttendanceConfirmation(_ context.Context, email, name, eventTitle, confirmURL, declineURL string) error {
+	log.Printf("[mail:console] send attendance confirmation email=%s name=%s event=%s confirm=%s decline=%s", email, name, eventTitle, confirmURL, declineURL)
 	return nil
 }
 
@@ -60,6 +66,42 @@ func (m *SMTPMailer) SendVerificationCode(_ context.Context, email, code, codeTy
 		"Your BoHack %s code is: %s\n\nIf you did not request this code, you can ignore this email.\n",
 		purpose,
 		code,
+	)
+
+	message := strings.Join([]string{
+		"From: " + m.from,
+		"To: " + email,
+		"Subject: " + subject,
+		"MIME-Version: 1.0",
+		"Content-Type: text/plain; charset=UTF-8",
+		"",
+		body,
+	}, "\r\n")
+
+	addr := fmt.Sprintf("%s:%d", m.host, m.port)
+	var auth smtp.Auth
+	if m.username != "" {
+		auth = smtp.PlainAuth("", m.username, m.password, m.host)
+	}
+
+	return smtp.SendMail(addr, auth, m.from, []string{email}, []byte(message))
+}
+
+func (m *SMTPMailer) SendAttendanceConfirmation(_ context.Context, email, name, eventTitle, confirmURL, declineURL string) error {
+	subject := "BoHack attendance confirmation"
+	if strings.TrimSpace(eventTitle) != "" {
+		subject = eventTitle + " attendance confirmation"
+	}
+	if strings.TrimSpace(name) == "" {
+		name = "there"
+	}
+
+	body := fmt.Sprintf(
+		"Hi %s,\n\nPlease confirm whether you can attend %s.\n\nConfirm attendance:\n%s\n\nUnable to attend:\n%s\n\nIf you did not expect this email, you can ignore it.\n",
+		name,
+		eventTitle,
+		confirmURL,
+		declineURL,
 	)
 
 	message := strings.Join([]string{

@@ -53,6 +53,7 @@ func main() {
 	eventRepo := repository.NewEventRepository(gormDB)
 	registrationRepo := repository.NewRegistrationRepository(gormDB)
 	attachmentRepo := repository.NewAttachmentRepository(gormDB)
+	attendanceConfirmationRepo := repository.NewAttendanceConfirmationRepository(gormDB)
 	verificationCodeRepo := repository.NewVerificationCodeRepository(gormDB)
 
 	tokenManager := auth.NewTokenManager(cfg.JWTSecret, cfg.AccessTokenTTL)
@@ -76,7 +77,15 @@ func main() {
 	profileHandler := handlers.NewProfileHandler(userRepo)
 	eventHandler := handlers.NewEventHandler(eventRepo, cfg.DefaultEventSlug)
 	adminEventHandler := handlers.NewAdminEventHandler(eventRepo)
+	adminUserHandler := handlers.NewAdminUserHandler(userRepo)
 	registrationHandler := handlers.NewRegistrationHandler(eventRepo, registrationRepo, cfg.DefaultEventSlug)
+	attendanceHandler := handlers.NewAttendanceHandler(
+		registrationRepo,
+		attendanceConfirmationRepo,
+		authMailer,
+		cfg.FrontendBaseURL,
+		cfg.AttendanceConfirmationTTL,
+	)
 	attachmentHandler := handlers.NewAttachmentHandler(
 		eventRepo,
 		registrationRepo,
@@ -85,7 +94,7 @@ func main() {
 		cfg.AttachmentDir,
 		cfg.MaxUploadBytes,
 	)
-	adminRegistrationHandler := handlers.NewAdminRegistrationHandler(eventRepo, registrationRepo)
+	adminRegistrationHandler := handlers.NewAdminRegistrationHandler(eventRepo, registrationRepo, attendanceConfirmationRepo)
 
 	router := server.NewRouter(
 		cfg.AllowedOrigins,
@@ -95,7 +104,9 @@ func main() {
 		profileHandler,
 		eventHandler,
 		adminEventHandler,
+		adminUserHandler,
 		registrationHandler,
+		attendanceHandler,
 		attachmentHandler,
 		adminRegistrationHandler,
 	)

@@ -21,7 +21,9 @@ func NewRouter(
 	profileHandler *handlers.ProfileHandler,
 	eventHandler *handlers.EventHandler,
 	adminEventHandler *handlers.AdminEventHandler,
+	adminUserHandler *handlers.AdminUserHandler,
 	registrationHandler *handlers.RegistrationHandler,
+	attendanceHandler *handlers.AttendanceHandler,
 	attachmentHandler *handlers.AttachmentHandler,
 	adminRegistrationHandler *handlers.AdminRegistrationHandler,
 ) http.Handler {
@@ -54,6 +56,8 @@ func NewRouter(
 		router.Get("/events", eventHandler.ListPublic)
 		router.Get("/events/current", eventHandler.GetCurrent)
 		router.Get("/events/{slug}", eventHandler.GetPublicBySlug)
+		router.Get("/attendance/confirm", attendanceHandler.Confirm)
+		router.Post("/attendance/confirm", attendanceHandler.Confirm)
 
 		router.With(authMiddleware).Get("/user/profile", profileHandler.Me)
 		router.With(authMiddleware).Patch("/user/profile", profileHandler.Update)
@@ -62,6 +66,7 @@ func NewRouter(
 		router.With(authMiddleware).Patch("/registration", registrationHandler.Update)
 		router.With(authMiddleware).Delete("/registration", registrationHandler.Cancel)
 		router.With(authMiddleware).Get("/registration/status", registrationHandler.Status)
+		router.With(authMiddleware).Get("/registration/certificate", registrationHandler.Certificate)
 		router.With(authMiddleware).Get("/registration/attachments", attachmentHandler.ListMy)
 		router.With(authMiddleware).Post("/registration/attachments", attachmentHandler.Upload)
 		router.With(authMiddleware).Delete("/registration/attachments/{attachmentID}", attachmentHandler.Delete)
@@ -70,6 +75,7 @@ func NewRouter(
 		router.With(authMiddleware).Put("/registrations", registrationHandler.Update)
 		router.With(authMiddleware).Patch("/registrations", registrationHandler.Update)
 		router.With(authMiddleware).Get("/registrations/me", registrationHandler.Status)
+		router.With(authMiddleware).Get("/registrations/me/certificate", registrationHandler.Certificate)
 		router.With(authMiddleware).Delete("/registrations/me", registrationHandler.Cancel)
 		router.With(authMiddleware).Get("/registrations/me/attachments", attachmentHandler.ListMy)
 		router.With(authMiddleware).Post("/registrations/me/attachments", attachmentHandler.Upload)
@@ -79,12 +85,17 @@ func NewRouter(
 		router.Route("/admin", func(r chi.Router) {
 			r.Use(authMiddleware)
 			r.Use(adminMiddleware)
+			r.Get("/users", adminUserHandler.List)
+			r.Get("/users/{userID}", adminUserHandler.Detail)
+			r.Patch("/users/{userID}", adminUserHandler.Update)
 			r.Get("/events", adminEventHandler.List)
 			r.Get("/events/{eventID}", adminEventHandler.Detail)
 			r.Post("/events", adminEventHandler.Create)
 			r.Patch("/events/{eventID}", adminEventHandler.Update)
 			r.Get("/registrations", adminRegistrationHandler.List)
 			r.Get("/registrations/{registrationID}", adminRegistrationHandler.Detail)
+			r.Patch("/registrations/{registrationID}", adminRegistrationHandler.Update)
+			r.Post("/registrations/{registrationID}/attendance-confirmation", attendanceHandler.AdminSend)
 			r.Get("/registrations/{registrationID}/attachments", attachmentHandler.AdminListForRegistration)
 			r.Patch("/registrations/{registrationID}/review", adminRegistrationHandler.Review)
 		})

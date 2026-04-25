@@ -1,7 +1,47 @@
+# --- env / secrets ---
 .env
-.env.local
+.env.*
+!.env.example
+
+# --- logs ---
 *.log
-storage/registration_attachments/*
-!storage/registration_attachments/.gitkeep
-storage/*.sqlite
-storage/*.sqlite-*
+
+# --- build artifacts ---
+/bin/
+/dist/
+*.exe
+*.test
+*.out
+
+# --- local dev databases (sqlite) ---
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+*.db
+*.db-journal
+
+# --- coverage ---
+coverage.out
+coverage.html
+*.coverprofile
+
+# --- attachment storage ---
+/storage/*
+!/storage/registration_attachments/
+/storage/registration_attachments/*
+!/storage/registration_attachments/.gitkeep
+
+# --- editor / IDE ---
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# --- OS junk ---
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- nested sub-repo (independent git repo, must not be tracked here) ---
+/bohack_2026_web_design/

@@ -136,15 +136,13 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.requireRegisterVerification {
-		if len(req.VerificationCode) != 6 {
-			httpx.Error(w, http.StatusBadRequest, 42212, "verification_code must be 6 digits")
-			return
-		}
-		if _, err := h.validateVerificationCode(r.Context(), req.Email, "register", req.VerificationCode); err != nil {
-			httpx.Error(w, http.StatusBadRequest, 40006, "verification code is invalid or expired")
-			return
-		}
+	if len(req.VerificationCode) != 6 {
+		httpx.Error(w, http.StatusBadRequest, 42212, "verification_code must be 6 digits")
+		return
+	}
+	if _, err := h.validateVerificationCode(r.Context(), req.Email, "register", req.VerificationCode); err != nil {
+		httpx.Error(w, http.StatusBadRequest, 40006, "verification code is invalid or expired")
+		return
 	}
 
 	exists, err := h.users.ExistsByUsername(r.Context(), req.Username)
@@ -202,9 +200,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.requireRegisterVerification {
-		_ = h.verificationCodes.DeleteByEmailAndType(r.Context(), req.Email, "register")
-	}
+	_ = h.verificationCodes.DeleteByEmailAndType(r.Context(), req.Email, "register")
 
 	h.respondWithToken(w, user, "registration successful")
 }
@@ -431,14 +427,16 @@ func (h *AuthHandler) handleSendVerificationCode(w http.ResponseWriter, r *http.
 			return
 		}
 
-		expiresAt := now.Add(h.verificationTTL)
-		if err := h.verificationCodes.Upsert(r.Context(), req.Email, codeType, code, expiresAt, now); err != nil {
-			httpx.Error(w, http.StatusInternalServerError, 50015, "failed to save verification code")
+		// 先送达再入库：发送失败不留下没人收到的验证码记录。
+		// console mailer 直接打印日志即视为送达；smtp mailer 实际投递。
+		if err := h.mailer.SendVerificationCode(r.Context(), req.Email, code, codeType); err != nil {
+			httpx.Error(w, http.StatusInternalServerError, 50016, "failed to send verification code")
 			return
 		}
 
-		if err := h.mailer.SendVerificationCode(r.Context(), req.Email, code, codeType); err != nil {
-			httpx.Error(w, http.StatusInternalServerError, 50016, "failed to send verification code")
+		expiresAt := now.Add(h.verificationTTL)
+		if err := h.verificationCodes.Upsert(r.Context(), req.Email, codeType, code, expiresAt, now); err != nil {
+			httpx.Error(w, http.StatusInternalServerError, 50015, "failed to save verification code")
 			return
 		}
 

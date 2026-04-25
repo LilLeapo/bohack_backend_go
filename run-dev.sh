@@ -4,7 +4,9 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 set -a
-source /home/admin/code/auth_db/postgres.env
+if [[ -f /home/admin/code/auth_db/postgres.env ]]; then
+  source /home/admin/code/auth_db/postgres.env
+fi
 if [[ -f "$ROOT_DIR/.env" ]]; then
   source "$ROOT_DIR/.env"
 fi

@@ -3,3 +3,5 @@
 *.log
 storage/registration_attachments/*
 !storage/registration_attachments/.gitkeep
+storage/*.sqlite
+storage/*.sqlite-*

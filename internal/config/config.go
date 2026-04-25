@@ -120,7 +120,7 @@ func Load() (Config, error) {
 	}
 	cfg.AttendanceConfirmationTTL = time.Duration(attendanceTTLHours) * time.Hour
 
-	requireRegisterVerification, err := strconv.ParseBool(envOrDefault("REQUIRE_REGISTER_VERIFICATION", "false"))
+	requireRegisterVerification, err := strconv.ParseBool(envOrDefault("REQUIRE_REGISTER_VERIFICATION", "true"))
 	if err != nil {
 		return Config{}, fmt.Errorf("invalid REQUIRE_REGISTER_VERIFICATION: %w", err)
 	}

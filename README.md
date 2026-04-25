@@ -21,11 +21,23 @@ zq到此一游
 - 管理员查看报名列表 / 报名详情
 - 管理员查看报名附件
 - 管理员审核报名
-- 启动时自动确保 PostgreSQL 表存在
+- 启动时自动确保 PostgreSQL / SQLite 表存在
 
 ## 运行
 
-开发环境默认会读取：
+### Go 环境
+
+本机已通过 Homebrew 安装 Go：
+
+```bash
+go version
+```
+
+Go 安装的命令行工具会放在 `~/go/bin`，该路径已写入 `~/.zshrc`。
+
+### PostgreSQL 开发环境
+
+开发环境会读取：
 
 - `/home/admin/code/auth_db/postgres.env`
 - 当前目录下可选的 `.env`
@@ -33,7 +45,7 @@ zq到此一游
 启动：
 
 ```bash
-cd /home/admin/code/bohack_backend_go
+cd /Users/lilleap/code/bohack_backend_go
 cp .env.example .env
 bash ./run-dev.sh
 ```
@@ -41,6 +53,29 @@ bash ./run-dev.sh
 默认监听：
 
 - `http://127.0.0.1:8080`
+
+### SQLite 本地调试
+
+不需要启动 PostgreSQL，直接运行：
+
+```bash
+cd /Users/lilleap/code/bohack_backend_go
+bash ./run-sqlite-dev.sh
+```
+
+默认会使用：
+
+- 数据库文件：`./storage/bohack-dev.sqlite`
+- 附件目录：`./storage/registration_attachments`
+- 邮件模式：`MAIL_MODE=console`
+
+也可以指定数据库路径：
+
+```bash
+SQLITE_PATH=./storage/debug.sqlite bash ./run-sqlite-dev.sh
+```
+
+服务启动时会自动建表并创建默认活动。
 
 ## 主要接口
 

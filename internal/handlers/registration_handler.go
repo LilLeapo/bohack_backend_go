@@ -269,12 +269,6 @@ func (h *RegistrationHandler) decodeValidatedPayload(w http.ResponseWriter, r *h
 	}
 
 	switch {
-	case payload.RealName == "":
-		httpx.Error(w, http.StatusBadRequest, 42210, "real_name is required")
-		return validatedRegistrationPayload{}, false
-	case payload.Phone == "":
-		httpx.Error(w, http.StatusBadRequest, 42211, "phone is required")
-		return validatedRegistrationPayload{}, false
 	case len(payload.RealName) > 100:
 		httpx.Error(w, http.StatusBadRequest, 42213, "real_name must be 100 characters or fewer")
 		return validatedRegistrationPayload{}, false

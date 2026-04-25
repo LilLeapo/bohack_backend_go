@@ -11,6 +11,7 @@ import (
 )
 
 type Config struct {
+	Host                        string
 	Port                        string
 	DBDriver                    string
 	DatabaseURL                 string
@@ -36,6 +37,7 @@ func Load() (Config, error) {
 	driver := normalizeDriver(envOrDefault("DB_DRIVER", "postgres"))
 
 	cfg := Config{
+		Host:              strings.TrimSpace(os.Getenv("HOST")),
 		Port:              envOrDefault("PORT", "8080"),
 		DBDriver:          driver,
 		DatabaseURL:       databaseURL(driver),

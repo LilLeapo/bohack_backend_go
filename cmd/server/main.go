@@ -100,14 +100,15 @@ func main() {
 		adminRegistrationHandler,
 	)
 
+	listenAddr := cfg.Host + ":" + cfg.Port
 	httpServer := &http.Server{
-		Addr:              ":" + cfg.Port,
+		Addr:              listenAddr,
 		Handler:           router,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
 	go func() {
-		log.Printf("bohack backend listening on :%s", cfg.Port)
+		log.Printf("bohack backend listening on %s", listenAddr)
 		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("listen and serve: %v", err)
 		}

@@ -1,0 +1,1452 @@
+openapi: 3.0.3
+info:
+  title: BoHack Backend API
+  version: 0.1.0
+  description: OpenAPI document for importing this Go backend into Apifox.
+servers:
+  - url: http://127.0.0.1:8080
+    description: Local backend without /api prefix
+  - url: http://127.0.0.1:8080/api
+    description: Local backend with /api prefix alias
+tags:
+  - name: Health
+  - name: Auth
+  - name: Profile
+  - name: Events
+  - name: Registration
+  - name: Attachments
+  - name: Attendance
+  - name: Admin Users
+  - name: Admin Events
+  - name: Admin Registrations
+security:
+  - bearerAuth: []
+paths:
+  /healthz:
+    get:
+      tags: [Health]
+      summary: Health check
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Envelope"
+              examples:
+                ok:
+                  value:
+                    code: 0
+                    message: OK
+                    data:
+                      status: ok
+
+  /auth/send-verification-code:
+    post:
+      tags: [Auth]
+      summary: Send email verification code
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendVerificationCodeRequest"
+            examples:
+              register:
+                summary: Register verification code
+                value:
+                  email: user@example.com
+                  code_type: register
+              reset:
+                summary: Password reset code
+                value:
+                  email: user@example.com
+                  code_type: reset
+      responses:
+        "200":
+          $ref: "#/components/responses/EnvelopeResponse"
+
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Register user
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+            examples:
+              default:
+                value:
+                  username: alice
+                  email: alice@example.com
+                  password: "123456"
+                  verification_code: "123456"
+      responses:
+        "200":
+          $ref: "#/components/responses/AuthResponse"
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+            examples:
+              by_username:
+                value:
+                  username: alice
+                  password: "123456"
+              by_email_or_username:
+                value:
+                  login: alice@example.com
+                  password: "123456"
+      responses:
+        "200":
+          $ref: "#/components/responses/AuthResponse"
+
+  /auth/forgot-password/send-code:
+    post:
+      tags: [Auth]
+      summary: Send forgot-password code
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmailOnlyRequest"
+            examples:
+              default:
+                value:
+                  email: alice@example.com
+      responses:
+        "200":
+          $ref: "#/components/responses/EnvelopeResponse"
+
+  /auth/forgot-password/reset:
+    post:
+      tags: [Auth]
+      summary: Reset password by verification code
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResetPasswordRequest"
+            examples:
+              default:
+                value:
+                  email: alice@example.com
+                  verification_code: "123456"
+                  new_password: "654321"
+      responses:
+        "200":
+          $ref: "#/components/responses/EnvelopeResponse"
+
+  /auth/change-password:
+    post:
+      tags: [Auth]
+      summary: Change current user's password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangePasswordRequest"
+            examples:
+              default:
+                value:
+                  current_password: "123456"
+                  new_password: "654321"
+      responses:
+        "200":
+          $ref: "#/components/responses/EnvelopeResponse"
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Get current user
+      responses:
+        "200":
+          $ref: "#/components/responses/UserResponse"
+
+  /user/profile:
+    get:
+      tags: [Profile]
+      summary: Get current user profile
+      responses:
+        "200":
+          $ref: "#/components/responses/UserResponse"
+    patch:
+      tags: [Profile]
+      summary: Update current user profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProfileRequest"
+            examples:
+              default:
+                value:
+                  avatar_url: https://example.com/avatar.png
+                  bio: Backend debugger
+                  phone: "13800138000"
+      responses:
+        "200":
+          $ref: "#/components/responses/UserResponse"
+
+  /events:
+    get:
+      tags: [Events]
+      summary: List public events
+      security: []
+      responses:
+        "200":
+          $ref: "#/components/responses/EventListResponse"
+
+  /events/current:
+    get:
+      tags: [Events]
+      summary: Get current public event
+      security: []
+      responses:
+        "200":
+          $ref: "#/components/responses/EventResponse"
+
+  /events/{slug}:
+    get:
+      tags: [Events]
+      summary: Get public event by slug
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/EventSlug"
+      responses:
+        "200":
+          $ref: "#/components/responses/EventResponse"
+
+  /registration:
+    post:
+      tags: [Registration]
+      summary: Submit registration
+      requestBody:
+        $ref: "#/components/requestBodies/RegistrationPayload"
+      responses:
+        "200":
+          $ref: "#/components/responses/RegistrationResponse"
+    put:
+      tags: [Registration]
+      summary: Replace current user's registration
+      requestBody:
+        $ref: "#/components/requestBodies/RegistrationPayload"
+      responses:
+        "200":
+          $ref: "#/components/responses/RegistrationResponse"
+    patch:
+      tags: [Registration]
+      summary: Update current user's registration
+      requestBody:
+        $ref: "#/components/requestBodies/RegistrationPayload"
+      responses:
+        "200":
+          $ref: "#/components/responses/RegistrationResponse"
+    delete:
+      tags: [Registration]
+      summary: Cancel current user's registration
+      parameters:
+        - $ref: "#/components/parameters/EventSlugQuery"
+      responses:
+        "200":
+          $ref: "#/components/responses/RegistrationResponse"
+
+  /registration/status:
+    get:
+      tags: [Registration]
+      summary: Get current user's registration status
+      parameters:
+        - $ref: "#/components/parameters/EventSlugQuery"
+      responses:
+        "200":
+          $ref: "#/components/responses/RegistrationResponse"
+
+  /registration/certificate:
+    get:
+      tags: [Registration]
+      summary: Download text certificate
+      parameters:
+        - $ref: "#/components/parameters/EventSlugQuery"
+      responses:
+        "200":
+          description: Plain text certificate
+          content:
+            text/plain:
+              schema:
+                type: string
+
+  /registration/attachments:
+    get:
+      tags: [Attachments]
+      summary: List current user's registration attachments
+      parameters:
+        - $ref: "#/components/parameters/EventSlugQuery"
+      responses:
+        "200":
+          $ref: "#/components/responses/AttachmentListResponse"
+    post:
+      tags: [Attachments]
+      summary: Upload registration attachment
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/UploadAttachmentRequest"
+            encoding:
+              file:
+                contentType: application/pdf
+      responses:
+        "200":
+          $ref: "#/components/responses/AttachmentResponse"
+
+  /registration/attachments/{attachmentID}:
+    delete:
+      tags: [Attachments]
+      summary: Delete current user's attachment
+      parameters:
+        - $ref: "#/components/parameters/AttachmentID"
+      responses:
+        "200":
+          $ref: "#/components/responses/EnvelopeResponse"
+
+  /registration/attachments/{attachmentID}/download:
+    get:
+      tags: [Attachments]
+      summary: Download current user's attachment
+      parameters:
+        - $ref: "#/components/parameters/AttachmentID"
+      responses:
+        "200":
+          description: Attachment file
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+
+  /registrations:
+    post:
+      tags: [Registration]
+      summary: Submit registration alias
+      requestBody:
+        $ref: "#/components/requestBodies/RegistrationPayload"
+      responses:
+        "200":
+          $ref: "#/components/responses/RegistrationResponse"
+    put:
+      tags: [Registration]
+      summary: Replace registration alias
+      requestBody:
+        $ref: "#/components/requestBodies/RegistrationPayload"
+      responses:
+        "200":
+          $ref: "#/components/responses/RegistrationResponse"
+    patch:
+      tags: [Registration]
+      summary: Update registration alias
+      requestBody:
+        $ref: "#/components/requestBodies/RegistrationPayload"
+      responses:
+        "200":
+          $ref: "#/components/responses/RegistrationResponse"
+
+  /registrations/me:
+    get:
+      tags: [Registration]
+      summary: Get current user's registration alias
+      parameters:
+        - $ref: "#/components/parameters/EventSlugQuery"
+      responses:
+        "200":
+          $ref: "#/components/responses/RegistrationResponse"
+    delete:
+      tags: [Registration]
+      summary: Cancel current user's registration alias
+      parameters:
+        - $ref: "#/components/parameters/EventSlugQuery"
+      responses:
+        "200":
+          $ref: "#/components/responses/RegistrationResponse"
+
+  /registrations/me/certificate:
+    get:
+      tags: [Registration]
+      summary: Download certificate alias
+      parameters:
+        - $ref: "#/components/parameters/EventSlugQuery"
+      responses:
+        "200":
+          description: Plain text certificate
+          content:
+            text/plain:
+              schema:
+                type: string
+
+  /registrations/me/attachments:
+    get:
+      tags: [Attachments]
+      summary: List attachment alias
+      parameters:
+        - $ref: "#/components/parameters/EventSlugQuery"
+      responses:
+        "200":
+          $ref: "#/components/responses/AttachmentListResponse"
+    post:
+      tags: [Attachments]
+      summary: Upload attachment alias
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/UploadAttachmentRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/AttachmentResponse"
+
+  /registrations/me/attachments/{attachmentID}:
+    delete:
+      tags: [Attachments]
+      summary: Delete attachment alias
+      parameters:
+        - $ref: "#/components/parameters/AttachmentID"
+      responses:
+        "200":
+          $ref: "#/components/responses/EnvelopeResponse"
+
+  /registrations/me/attachments/{attachmentID}/download:
+    get:
+      tags: [Attachments]
+      summary: Download attachment alias
+      parameters:
+        - $ref: "#/components/parameters/AttachmentID"
+      responses:
+        "200":
+          description: Attachment file
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+
+  /attendance/confirm:
+    get:
+      tags: [Attendance]
+      summary: Confirm or decline attendance by query token
+      security: []
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+          example: replace-with-token-from-email
+        - name: status
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [confirmed, declined]
+          example: confirmed
+      responses:
+        "200":
+          $ref: "#/components/responses/EnvelopeResponse"
+    post:
+      tags: [Attendance]
+      summary: Confirm or decline attendance by JSON body
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AttendanceConfirmRequest"
+            examples:
+              confirm:
+                value:
+                  token: replace-with-token-from-email
+                  status: confirmed
+              decline:
+                value:
+                  token: replace-with-token-from-email
+                  status: declined
+      responses:
+        "200":
+          $ref: "#/components/responses/EnvelopeResponse"
+
+  /admin/users:
+    get:
+      tags: [Admin Users]
+      summary: List users
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - name: q
+          in: query
+          schema:
+            type: string
+          example: alice
+        - name: role
+          in: query
+          schema:
+            type: string
+            enum: [visitor, contestant, experiencer, admin]
+      responses:
+        "200":
+          $ref: "#/components/responses/UserPageResponse"
+
+  /admin/users/{userID}:
+    get:
+      tags: [Admin Users]
+      summary: Get user detail
+      parameters:
+        - $ref: "#/components/parameters/UserID"
+      responses:
+        "200":
+          $ref: "#/components/responses/UserResponse"
+    patch:
+      tags: [Admin Users]
+      summary: Update user
+      parameters:
+        - $ref: "#/components/parameters/UserID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminUpdateUserRequest"
+            examples:
+              make_admin:
+                value:
+                  role: admin
+                  is_admin: true
+              update_profile:
+                value:
+                  username: alice
+                  email: alice@example.com
+                  bk_balance: 100
+      responses:
+        "200":
+          $ref: "#/components/responses/UserResponse"
+
+  /admin/events:
+    get:
+      tags: [Admin Events]
+      summary: List events
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [draft, published, archived]
+      responses:
+        "200":
+          $ref: "#/components/responses/EventListResponse"
+    post:
+      tags: [Admin Events]
+      summary: Create event
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateEventRequest"
+            examples:
+              default:
+                value:
+                  slug: bohack-2026
+                  title: BoHack 2026
+                  status: published
+                  is_current: true
+                  registration_open_at: "2026-04-01T00:00:00Z"
+                  registration_close_at: "2026-12-31T23:59:59Z"
+      responses:
+        "200":
+          $ref: "#/components/responses/EventResponse"
+
+  /admin/events/{eventID}:
+    get:
+      tags: [Admin Events]
+      summary: Get event detail
+      parameters:
+        - $ref: "#/components/parameters/EventID"
+      responses:
+        "200":
+          $ref: "#/components/responses/EventResponse"
+    patch:
+      tags: [Admin Events]
+      summary: Update event
+      parameters:
+        - $ref: "#/components/parameters/EventID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateEventRequest"
+            examples:
+              publish:
+                value:
+                  status: published
+                  is_current: true
+              rename:
+                value:
+                  title: BoHack 2026 Updated
+      responses:
+        "200":
+          $ref: "#/components/responses/EventResponse"
+
+  /admin/registrations:
+    get:
+      tags: [Admin Registrations]
+      summary: List registrations
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [submitted, under_review, approved, rejected, cancelled]
+        - $ref: "#/components/parameters/EventSlugQuery"
+      responses:
+        "200":
+          $ref: "#/components/responses/RegistrationPageResponse"
+
+  /admin/registrations/{registrationID}:
+    get:
+      tags: [Admin Registrations]
+      summary: Get registration detail
+      parameters:
+        - $ref: "#/components/parameters/RegistrationID"
+      responses:
+        "200":
+          $ref: "#/components/responses/RegistrationResponse"
+    patch:
+      tags: [Admin Registrations]
+      summary: Admin update registration
+      parameters:
+        - $ref: "#/components/parameters/RegistrationID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminUpdateRegistrationRequest"
+            examples:
+              default:
+                value:
+                  real_name: Alice Zhang
+                  phone: "13800138000"
+                  email_snapshot: alice@example.com
+                  school: Example University
+                  team_name: Team Alpha
+                  extra:
+                    github: https://github.com/example
+      responses:
+        "200":
+          $ref: "#/components/responses/RegistrationResponse"
+
+  /admin/registrations/{registrationID}/review:
+    patch:
+      tags: [Admin Registrations]
+      summary: Review registration
+      parameters:
+        - $ref: "#/components/parameters/RegistrationID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReviewRegistrationRequest"
+            examples:
+              approve:
+                value:
+                  status: approved
+                  review_note: Approved for event
+              reject:
+                value:
+                  status: rejected
+                  review_note: Missing required material
+      responses:
+        "200":
+          $ref: "#/components/responses/RegistrationResponse"
+
+  /admin/registrations/{registrationID}/attachments:
+    get:
+      tags: [Admin Registrations, Attachments]
+      summary: List attachments for registration
+      parameters:
+        - $ref: "#/components/parameters/RegistrationID"
+      responses:
+        "200":
+          $ref: "#/components/responses/AttachmentListResponse"
+
+  /admin/registrations/{registrationID}/attendance-confirmation:
+    post:
+      tags: [Attendance, Admin Registrations]
+      summary: Send attendance confirmation email
+      parameters:
+        - $ref: "#/components/parameters/RegistrationID"
+      responses:
+        "200":
+          $ref: "#/components/responses/EnvelopeResponse"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    Page:
+      name: page
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+      example: 1
+    PageSize:
+      name: page_size
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+      example: 20
+    EventSlug:
+      name: slug
+      in: path
+      required: true
+      schema:
+        type: string
+      example: bohack-2026
+    EventSlugQuery:
+      name: event_slug
+      in: query
+      required: false
+      schema:
+        type: string
+      example: bohack-2026
+    EventID:
+      name: eventID
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+      example: 1
+    UserID:
+      name: userID
+      in: path
+      required: true
+      schema:
+        type: integer
+      example: 1
+    RegistrationID:
+      name: registrationID
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+      example: 1
+    AttachmentID:
+      name: attachmentID
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+      example: 1
+
+  requestBodies:
+    RegistrationPayload:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/RegistrationPayload"
+          examples:
+            default:
+              value:
+                event_slug: bohack-2026
+                real_name: Alice Zhang
+                phone: "13800138000"
+                school: Example University
+                company: Example Inc.
+                bio: Interested in backend and AI.
+                team_name: Team Alpha
+                role_preference: backend
+                source: friend
+                note: Need vegetarian meal.
+                extra:
+                  github: https://github.com/example
+                  tshirtSize: M
+
+  responses:
+    EnvelopeResponse:
+      description: JSON envelope response
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Envelope"
+    AuthResponse:
+      description: Auth response with JWT token
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/Envelope"
+              - type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/AuthData"
+          examples:
+            default:
+              value:
+                code: 0
+                message: login successful
+                data:
+                  access_token: eyJhbGciOi...
+                  token_type: Bearer
+                  expires_at: "2026-04-25T12:00:00Z"
+                  user:
+                    uid: 1
+                    username: alice
+                    email: alice@example.com
+                    isAdmin: false
+                    role: visitor
+                    bkBalance: 0
+                    createdAt: "2026-04-25T08:00:00Z"
+                    updatedAt: "2026-04-25T08:00:00Z"
+    UserResponse:
+      description: User response
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/Envelope"
+              - type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/User"
+    UserPageResponse:
+      description: Paginated user response
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/Envelope"
+              - type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/UserPage"
+    EventResponse:
+      description: Event response
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/Envelope"
+              - type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Event"
+    EventListResponse:
+      description: Event list response
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/Envelope"
+              - type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Event"
+    RegistrationResponse:
+      description: Registration response
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/Envelope"
+              - type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Registration"
+    RegistrationPageResponse:
+      description: Paginated registration response
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/Envelope"
+              - type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/RegistrationPage"
+    AttachmentResponse:
+      description: Attachment response
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/Envelope"
+              - type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Attachment"
+    AttachmentListResponse:
+      description: Attachment list response
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/Envelope"
+              - type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Attachment"
+
+  schemas:
+    Envelope:
+      type: object
+      properties:
+        code:
+          type: integer
+          example: 0
+        message:
+          type: string
+          example: OK
+        data:
+          nullable: true
+      required: [code, message]
+
+    SendVerificationCodeRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        code_type:
+          type: string
+          enum: [register, reset]
+          description: Also accepts codeType, purpose, or type.
+      required: [email, code_type]
+
+    EmailOnlyRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+      required: [email]
+
+    RegisterRequest:
+      type: object
+      properties:
+        username:
+          type: string
+          maxLength: 50
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 6
+          maxLength: 128
+        verification_code:
+          type: string
+          minLength: 6
+          maxLength: 6
+          description: Required by current handler; alias verificationCode is also accepted.
+      required: [username, email, password, verification_code]
+
+    LoginRequest:
+      type: object
+      properties:
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+        login:
+          type: string
+          description: Username or email; used when username/email are empty.
+        password:
+          type: string
+          minLength: 6
+          maxLength: 128
+      required: [password]
+
+    ChangePasswordRequest:
+      type: object
+      properties:
+        current_password:
+          type: string
+        new_password:
+          type: string
+      required: [current_password, new_password]
+
+    ResetPasswordRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        verification_code:
+          type: string
+        new_password:
+          type: string
+      required: [email, verification_code, new_password]
+
+    UpdateProfileRequest:
+      type: object
+      properties:
+        avatar_url:
+          type: string
+          nullable: true
+        bio:
+          type: string
+          nullable: true
+          maxLength: 5000
+        phone:
+          type: string
+          nullable: true
+          maxLength: 32
+
+    RegistrationPayload:
+      type: object
+      properties:
+        event_slug:
+          type: string
+          description: Defaults to DEFAULT_EVENT_SLUG when empty.
+        real_name:
+          type: string
+          maxLength: 100
+        phone:
+          type: string
+          maxLength: 32
+        school:
+          type: string
+          maxLength: 255
+        company:
+          type: string
+          maxLength: 255
+        bio:
+          type: string
+        team_name:
+          type: string
+          maxLength: 255
+        role_preference:
+          type: string
+          maxLength: 50
+        source:
+          type: string
+          maxLength: 100
+        note:
+          type: string
+          maxLength: 5000
+        extra:
+          type: object
+          additionalProperties: true
+      required: [real_name, phone]
+
+    UploadAttachmentRequest:
+      type: object
+      properties:
+        file:
+          type: string
+          format: binary
+        kind:
+          type: string
+          default: attachment
+          maxLength: 50
+        event_slug:
+          type: string
+          example: bohack-2026
+      required: [file]
+
+    AttendanceConfirmRequest:
+      type: object
+      properties:
+        token:
+          type: string
+        status:
+          type: string
+          enum: [confirmed, declined]
+      required: [token, status]
+
+    CreateEventRequest:
+      type: object
+      properties:
+        slug:
+          type: string
+          maxLength: 100
+        title:
+          type: string
+          maxLength: 255
+        status:
+          type: string
+          enum: [draft, published, archived]
+          default: draft
+        is_current:
+          type: boolean
+        registration_open_at:
+          type: string
+          nullable: true
+          example: "2026-04-01T00:00:00Z"
+        registration_close_at:
+          type: string
+          nullable: true
+          example: "2026-12-31T23:59:59Z"
+      required: [slug, title]
+
+    UpdateEventRequest:
+      allOf:
+        - $ref: "#/components/schemas/CreateEventRequest"
+      required: []
+
+    AdminUpdateUserRequest:
+      type: object
+      properties:
+        username:
+          type: string
+          maxLength: 50
+        email:
+          type: string
+          format: email
+        avatar_url:
+          type: string
+          nullable: true
+        bio:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        is_admin:
+          type: boolean
+        role:
+          type: string
+          enum: [visitor, contestant, experiencer, admin]
+        bk_balance:
+          type: number
+          minimum: 0
+        team_id:
+          type: integer
+          nullable: true
+
+    AdminUpdateRegistrationRequest:
+      type: object
+      properties:
+        real_name:
+          type: string
+          maxLength: 100
+        phone:
+          type: string
+          maxLength: 32
+        email_snapshot:
+          type: string
+          format: email
+        school:
+          type: string
+          nullable: true
+        company:
+          type: string
+          nullable: true
+        bio:
+          type: string
+          nullable: true
+        team_name:
+          type: string
+          nullable: true
+        role_preference:
+          type: string
+          nullable: true
+        source:
+          type: string
+          nullable: true
+        note:
+          type: string
+          nullable: true
+        extra:
+          type: object
+          additionalProperties: true
+
+    ReviewRegistrationRequest:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [submitted, under_review, approved, rejected, cancelled]
+        review_note:
+          type: string
+          maxLength: 5000
+      required: [status]
+
+    AuthData:
+      type: object
+      properties:
+        access_token:
+          type: string
+        token_type:
+          type: string
+          example: Bearer
+        expires_at:
+          type: string
+          format: date-time
+        user:
+          $ref: "#/components/schemas/User"
+
+    User:
+      type: object
+      properties:
+        uid:
+          type: integer
+        username:
+          type: string
+        email:
+          type: string
+        avatarUrl:
+          type: string
+          nullable: true
+        bio:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        isAdmin:
+          type: boolean
+        role:
+          type: string
+          enum: [visitor, contestant, experiencer, admin]
+        bkBalance:
+          type: number
+        teamId:
+          type: integer
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    Event:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        slug:
+          type: string
+        title:
+          type: string
+        status:
+          type: string
+          enum: [draft, published, archived]
+        isCurrent:
+          type: boolean
+        registrationOpenAt:
+          type: string
+          format: date-time
+          nullable: true
+        registrationCloseAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    Registration:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        eventId:
+          type: integer
+          format: int64
+        eventSlug:
+          type: string
+        eventTitle:
+          type: string
+        userId:
+          type: integer
+        username:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [draft, submitted, under_review, approved, rejected, cancelled]
+        realName:
+          type: string
+        phone:
+          type: string
+        emailSnapshot:
+          type: string
+        school:
+          type: string
+          nullable: true
+        company:
+          type: string
+          nullable: true
+        bio:
+          type: string
+          nullable: true
+        teamName:
+          type: string
+          nullable: true
+        rolePreference:
+          type: string
+          nullable: true
+        source:
+          type: string
+          nullable: true
+        note:
+          type: string
+          nullable: true
+        extra:
+          type: object
+          additionalProperties: true
+        submittedAt:
+          type: string
+          format: date-time
+        reviewedAt:
+          type: string
+          format: date-time
+          nullable: true
+        reviewedBy:
+          type: integer
+          nullable: true
+        reviewNote:
+          type: string
+          nullable: true
+        attendance:
+          $ref: "#/components/schemas/AttendanceConfirmation"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    AttendanceConfirmation:
+      type: object
+      nullable: true
+      properties:
+        id:
+          type: integer
+          format: int64
+        registrationId:
+          type: integer
+          format: int64
+        userId:
+          type: integer
+        status:
+          type: string
+          enum: [pending, confirmed, declined]
+        expiresAt:
+          type: string
+          format: date-time
+        sentAt:
+          type: string
+          format: date-time
+        respondedAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    Attachment:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        registrationId:
+          type: integer
+          format: int64
+        userId:
+          type: integer
+        kind:
+          type: string
+        fileName:
+          type: string
+        mimeType:
+          type: string
+        fileSize:
+          type: integer
+          format: int64
+        downloadUrl:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    UserPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/User"
+        total:
+          type: integer
+        page:
+          type: integer
+        pageSize:
+          type: integer
+
+    RegistrationPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Registration"
+        total:
+          type: integer
+        page:
+          type: integer
+        pageSize:
+          type: integer

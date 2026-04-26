@@ -1,7 +1,9 @@
 # BoHack backend dev/test Makefile
-# 默认目标：用 sqlite + console mailer 起服务，零外部依赖。
+# 默认目标：用 sqlite 起服务，邮件配置优先读取 .env。
 
 SHELL := /usr/bin/env bash
+
+-include .env
 
 # ---- 可覆盖参数 ----
 HOST                              ?= 127.0.0.1
@@ -19,13 +21,24 @@ MAX_UPLOAD_MB                     ?= 20
 ACCESS_TOKEN_TTL_MINUTES          ?= 720
 VERIFICATION_CODE_EXPIRE_MINUTES  ?= 10
 VERIFICATION_CODE_MIN_INTERVAL_SECONDS ?= 60
-REQUIRE_REGISTER_VERIFICATION     ?= false
+REQUIRE_REGISTER_VERIFICATION     ?= true
+MAIL_MODE                         ?= smtp
+SMTP_HOST                         ?=
+SMTP_PORT                         ?= 587
+SMTP_USERNAME                     ?=
+SMTP_PASSWORD                     ?=
+SMTP_FROM                         ?=
 
-# 公共环境（sqlite + console 假邮件）。所有值用引号，避免含空格的标题被拆成命令。
+# 公共环境。所有值用引号，避免含空格的标题被拆成命令。
 DEV_ENV = \
 	DB_DRIVER=sqlite \
 	SQLITE_PATH='$(SQLITE_PATH)' \
-	MAIL_MODE=console \
+	MAIL_MODE='$(MAIL_MODE)' \
+	SMTP_HOST='$(SMTP_HOST)' \
+	SMTP_PORT='$(SMTP_PORT)' \
+	SMTP_USERNAME='$(SMTP_USERNAME)' \
+	SMTP_PASSWORD='$(SMTP_PASSWORD)' \
+	SMTP_FROM='$(SMTP_FROM)' \
 	JWT_SECRET='$(JWT_SECRET)' \
 	HOST='$(HOST)' \
 	PORT='$(PORT)' \
@@ -44,7 +57,7 @@ DEV_ENV = \
 help:
 	@echo "Available targets:"
 	@echo "  make dev-all       - run backend + frontend together (Ctrl+C stops both)"
-	@echo "  make dev           - run backend only (sqlite + console mailer)"
+	@echo "  make dev           - run backend only (sqlite + configured mailer)"
 	@echo "  make dev-verify    - same as dev, but REQUIRE_REGISTER_VERIFICATION=true"
 	@echo "  make dev-frontend  - run frontend dev server only"
 	@echo "  make frontend-install - npm install in $(FRONTEND_DIR)"

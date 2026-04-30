@@ -98,6 +98,7 @@ func NewRouter(
 			r.Patch("/registrations/{registrationID}", adminRegistrationHandler.Update)
 			r.Post("/registrations/{registrationID}/attendance-confirmation", attendanceHandler.AdminSend)
 			r.Get("/registrations/{registrationID}/attachments", attachmentHandler.AdminListForRegistration)
+			r.Get("/registrations/{registrationID}/attachments/{attachmentID}/download", attachmentHandler.AdminDownload)
 			r.Patch("/registrations/{registrationID}/review", adminRegistrationHandler.Review)
 		})
 	}

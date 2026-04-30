@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -118,7 +119,9 @@ func (h *AttachmentHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	r.Body = http.MaxBytesReader(w, r.Body, h.maxUploadBytes+(2*1024*1024))
+	// Allow a small slack (64KB) for multipart boundaries, headers, and other form fields
+	// on top of the configured per-file maximum.
+	r.Body = http.MaxBytesReader(w, r.Body, h.maxUploadBytes+(64*1024))
 	if err := r.ParseMultipartForm(8 << 20); err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "request body too large") {
 			httpx.Error(w, http.StatusRequestEntityTooLarge, 41301, "uploaded file is too large")
@@ -172,7 +175,7 @@ func (h *AttachmentHandler) Upload(w http.ResponseWriter, r *http.Request) {
 
 	originalFileName := sanitizeOriginalFileName(header.Filename)
 	ext := strings.ToLower(filepath.Ext(originalFileName))
-	detectedType, err := sniffContentType(file)
+	detectedType, bodyReader, err := sniffContentType(file)
 	if err != nil {
 		httpx.Error(w, http.StatusBadRequest, 42263, "failed to read uploaded file")
 		return
@@ -194,20 +197,26 @@ func (h *AttachmentHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	written, copyErr := copyUploadedFile(dst, file)
+	written, copyErr := copyUploadedFile(dst, bodyReader)
 	closeErr := dst.Close()
 	if copyErr != nil || closeErr != nil {
-		_ = os.Remove(absPath)
+		if rmErr := os.Remove(absPath); rmErr != nil && !errors.Is(rmErr, os.ErrNotExist) {
+			log.Printf("[attachment:upload] cleanup failed path=%s err=%v", absPath, rmErr)
+		}
 		httpx.Error(w, http.StatusInternalServerError, 50053, "failed to save attachment")
 		return
 	}
 	if written <= 0 {
-		_ = os.Remove(absPath)
+		if rmErr := os.Remove(absPath); rmErr != nil && !errors.Is(rmErr, os.ErrNotExist) {
+			log.Printf("[attachment:upload] cleanup failed path=%s err=%v", absPath, rmErr)
+		}
 		httpx.Error(w, http.StatusBadRequest, 42265, "uploaded file is empty")
 		return
 	}
 	if written > h.maxUploadBytes {
-		_ = os.Remove(absPath)
+		if rmErr := os.Remove(absPath); rmErr != nil && !errors.Is(rmErr, os.ErrNotExist) {
+			log.Printf("[attachment:upload] cleanup failed path=%s err=%v", absPath, rmErr)
+		}
 		httpx.Error(w, http.StatusRequestEntityTooLarge, 41301, "uploaded file is too large")
 		return
 	}
@@ -221,7 +230,9 @@ func (h *AttachmentHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		FileSize:       written,
 	})
 	if err != nil {
-		_ = os.Remove(absPath)
+		if rmErr := os.Remove(absPath); rmErr != nil && !errors.Is(rmErr, os.ErrNotExist) {
+			log.Printf("[attachment:upload] cleanup failed path=%s err=%v", absPath, rmErr)
+		}
 		httpx.Error(w, http.StatusInternalServerError, 50054, "failed to create attachment record")
 		return
 	}
@@ -311,6 +322,41 @@ func (h *AttachmentHandler) Download(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.serveAttachment(w, r, attachment)
+}
+
+// AdminDownload streams a participant's attachment for admins. Compared to
+// Download, it is mounted under /admin/... and additionally verifies that the
+// attachment actually belongs to the registrationID in the URL, so admins
+// cannot accidentally fetch an attachment from a different registration.
+func (h *AttachmentHandler) AdminDownload(w http.ResponseWriter, r *http.Request) {
+	registrationID, ok := readRegistrationID(w, r)
+	if !ok {
+		return
+	}
+	attachmentID, ok := readAttachmentID(w, r)
+	if !ok {
+		return
+	}
+
+	attachment, err := h.attachments.GetByID(r.Context(), attachmentID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			httpx.Error(w, http.StatusNotFound, 40420, "attachment not found")
+			return
+		}
+		httpx.Error(w, http.StatusInternalServerError, 50055, "failed to load attachment")
+		return
+	}
+	if attachment.RegistrationID != registrationID {
+		httpx.Error(w, http.StatusNotFound, 40420, "attachment not found")
+		return
+	}
+
+	h.serveAttachment(w, r, attachment)
+}
+
+func (h *AttachmentHandler) serveAttachment(w http.ResponseWriter, r *http.Request, attachment *models.RegistrationAttachment) {
 	absPath, err := h.resolveStoragePath(attachment.StoragePath)
 	if err != nil {
 		httpx.Error(w, http.StatusInternalServerError, 50058, "invalid attachment storage path")
@@ -435,18 +481,19 @@ func sanitizeOriginalFileName(value string) string {
 	return value
 }
 
-func sniffContentType(file multipartFile) (string, error) {
-	var buf [512]byte
-	n, err := file.Read(buf[:])
-	if err != nil && !errors.Is(err, io.EOF) {
-		return "", err
+// sniffContentType reads up to the first 512 bytes from the uploaded file to
+// detect its MIME type, and returns an io.Reader that re-prepends those bytes
+// so the caller can stream the full body to disk without relying on Seek.
+func sniffContentType(file multipartFile) (string, io.Reader, error) {
+	head := make([]byte, 512)
+	n, err := io.ReadFull(file, head)
+	if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {
+		return "", nil, err
 	}
+	head = head[:n]
 
-	detected := http.DetectContentType(buf[:n])
-	if _, err := file.Seek(0, io.SeekStart); err != nil {
-		return "", err
-	}
-	return detected, nil
+	detected := http.DetectContentType(head)
+	return detected, io.MultiReader(strings.NewReader(string(head)), file), nil
 }
 
 func isAllowedAttachment(ext, mimeType string) bool {
@@ -455,23 +502,52 @@ func isAllowedAttachment(ext, mimeType string) bool {
 		return false
 	}
 
-	if strings.HasPrefix(mimeType, "image/") {
-		switch mimeType {
-		case "image/jpeg", "image/png", "image/webp":
-			return ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".webp"
-		default:
-			return false
-		}
+	mimeType = strings.ToLower(strings.TrimSpace(mimeType))
+	// Some sniffers append parameters (e.g. "text/plain; charset=utf-8").
+	if idx := strings.Index(mimeType, ";"); idx >= 0 {
+		mimeType = strings.TrimSpace(mimeType[:idx])
 	}
 
 	switch ext {
+	case ".jpg", ".jpeg":
+		return mimeType == "image/jpeg"
+	case ".png":
+		return mimeType == "image/png"
+	case ".webp":
+		return mimeType == "image/webp"
 	case ".pdf":
-		return mimeType == "application/pdf" || mimeType == "application/octet-stream"
+		return mimeType == "application/pdf"
 	case ".txt":
-		return strings.HasPrefix(mimeType, "text/plain") || mimeType == "application/octet-stream"
-	default:
-		return true
+		return strings.HasPrefix(mimeType, "text/plain")
+	case ".zip":
+		return mimeType == "application/zip"
+	case ".rar":
+		// http.DetectContentType recognises RAR as application/x-rar-compressed.
+		return mimeType == "application/x-rar-compressed" || mimeType == "application/vnd.rar"
+	case ".7z":
+		return mimeType == "application/x-7z-compressed"
+	case ".doc":
+		// Legacy Office documents are OLE compound files.
+		return mimeType == "application/x-ole-storage" ||
+			mimeType == "application/msword" ||
+			mimeType == "application/octet-stream"
+	case ".xls":
+		return mimeType == "application/x-ole-storage" ||
+			mimeType == "application/vnd.ms-excel" ||
+			mimeType == "application/octet-stream"
+	case ".ppt":
+		return mimeType == "application/x-ole-storage" ||
+			mimeType == "application/vnd.ms-powerpoint" ||
+			mimeType == "application/octet-stream"
+	case ".docx", ".xlsx", ".pptx":
+		// OOXML files are ZIP containers; net/http sniffer reports application/zip.
+		return mimeType == "application/zip" ||
+			mimeType == "application/x-zip-compressed" ||
+			mimeType == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+			mimeType == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+			mimeType == "application/vnd.openxmlformats-officedocument.presentationml.presentation"
 	}
+	return false
 }
 
 func buildAttachmentDisposition(fileName string) string {

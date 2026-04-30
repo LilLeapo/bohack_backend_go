@@ -162,7 +162,7 @@ SQLITE_PATH=./storage/debug.sqlite bash ./run-sqlite-dev.sh
 - 邮件支持两种模式：
   - `MAIL_MODE=console`
   - `MAIL_MODE=smtp`
-- `console` 模式下会把验证码写到服务日志，并在接口响应里返回 `debug_code`，仅适合开发环境。
+- `console` 模式下不会实际投递邮件，只记录发送动作日志；`smtp` 模式会记录 SMTP 发送开始、失败和服务端接受日志，便于排查发信问题。
 - 审核状态支持：
   - `submitted`
   - `under_review`
@@ -191,4 +191,4 @@ SQLITE_PATH=./storage/debug.sqlite bash ./run-sqlite-dev.sh
 - `VERIFICATION_CODE_MIN_INTERVAL_SECONDS`:
   默认 `60`
 - `REQUIRE_REGISTER_VERIFICATION`:
-  默认 `false`
+  默认 `true`

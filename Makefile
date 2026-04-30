@@ -12,6 +12,11 @@ SQLITE_PATH                       ?= ./bohack.dev.sqlite
 FRONTEND_DIR                      ?= ./bohack_2026_web_design
 FRONTEND_PORT                     ?= 5173
 FRONTEND_API_BASE_URL             ?= http://$(HOST):$(PORT)
+BUILD_OUTPUT                      ?= ./bin/server
+DEPLOY_BIN                        ?= /usr/local/bin/bohack-backend
+DEPLOY_SERVICE                    ?= bohack-backend
+SUDO                              ?= sudo
+SYSTEMCTL                         ?= systemctl
 JWT_SECRET                        ?= dev-secret-change-me
 DEFAULT_EVENT_SLUG                ?= bohack-2026
 DEFAULT_EVENT_TITLE               ?= BoHack 2026
@@ -52,7 +57,7 @@ DEV_ENV = \
 	VERIFICATION_CODE_MIN_INTERVAL_SECONDS='$(VERIFICATION_CODE_MIN_INTERVAL_SECONDS)' \
 	REQUIRE_REGISTER_VERIFICATION='$(REQUIRE_REGISTER_VERIFICATION)'
 
-.PHONY: help dev run dev-verify dev-all dev-frontend frontend-install build tidy clean reset-db storage e2e test fmt vet
+.PHONY: help dev run dev-verify dev-all dev-frontend frontend-install build deploy tidy clean reset-db storage e2e test fmt vet
 
 help:
 	@echo "Available targets:"
@@ -61,7 +66,8 @@ help:
 	@echo "  make dev-verify    - same as dev, but REQUIRE_REGISTER_VERIFICATION=true"
 	@echo "  make dev-frontend  - run frontend dev server only"
 	@echo "  make frontend-install - npm install in $(FRONTEND_DIR)"
-	@echo "  make build         - go build ./cmd/server -> ./bin/server"
+	@echo "  make build         - go build ./cmd/server -> $(BUILD_OUTPUT)"
+	@echo "  make deploy        - build, install to $(DEPLOY_BIN), restart $(DEPLOY_SERVICE)"
 	@echo "  make tidy          - go mod tidy"
 	@echo "  make fmt           - gofmt -w ."
 	@echo "  make vet           - go vet ./..."
@@ -73,6 +79,7 @@ help:
 	@echo ""
 	@echo "Override any var, e.g.: make dev PORT=9090 SQLITE_PATH=./tmp.db"
 	@echo "                       make dev-all FRONTEND_PORT=3000"
+	@echo "                       make deploy DEPLOY_BIN=/usr/local/bin/bohack-backend"
 
 dev: storage
 	$(DEV_ENV) go run ./cmd/server
@@ -109,7 +116,14 @@ dev-all: storage
 		wait
 
 build:
-	go build -o ./bin/server ./cmd/server
+	@mkdir -p "$(dir $(BUILD_OUTPUT))"
+	go build -o "$(BUILD_OUTPUT)" ./cmd/server
+
+deploy: build
+	$(SUDO) install -d "$(dir $(DEPLOY_BIN))"
+	$(SUDO) install -m 755 "$(BUILD_OUTPUT)" "$(DEPLOY_BIN)"
+	$(SUDO) $(SYSTEMCTL) restart "$(DEPLOY_SERVICE)"
+	$(SUDO) $(SYSTEMCTL) --no-pager --full status "$(DEPLOY_SERVICE)"
 
 tidy:
 	go mod tidy

@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"bohack_backend_go/internal/auth"
 	"bohack_backend_go/internal/httpx"
 	"bohack_backend_go/internal/models"
 	"bohack_backend_go/internal/repository"
@@ -33,6 +34,11 @@ type adminUpdateUserRequest struct {
 	BKBalanceCamel *float64 `json:"bkBalance"`
 	TeamID         *int     `json:"team_id"`
 	TeamIDCamel    *int     `json:"teamId"`
+}
+
+type adminUpdateUserPasswordRequest struct {
+	Password    string `json:"password"`
+	NewPassword string `json:"newPassword"`
 }
 
 func NewAdminUserHandler(users *repository.UserRepository) *AdminUserHandler {
@@ -122,6 +128,48 @@ func (h *AdminUserHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httpx.OK(w, updatedUser, "user updated")
+}
+
+func (h *AdminUserHandler) UpdatePassword(w http.ResponseWriter, r *http.Request) {
+	uid, ok := readUserID(w, r)
+	if !ok {
+		return
+	}
+
+	var req adminUpdateUserPasswordRequest
+	if !httpx.DecodeJSON(w, r, &req) {
+		return
+	}
+
+	password := strings.TrimSpace(req.Password)
+	if password == "" {
+		password = strings.TrimSpace(req.NewPassword)
+	}
+	if len(password) < 6 || len(password) > 128 {
+		httpx.Error(w, http.StatusBadRequest, 42277, "password must be between 6 and 128 characters")
+		return
+	}
+
+	if _, err := h.users.GetByID(r.Context(), uid); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			httpx.Error(w, http.StatusNotFound, 40470, "user not found")
+			return
+		}
+		httpx.Error(w, http.StatusInternalServerError, 50071, "failed to load user")
+		return
+	}
+
+	passwordHash, err := auth.HashPassword(password)
+	if err != nil {
+		httpx.Error(w, http.StatusInternalServerError, 50073, "failed to hash password")
+		return
+	}
+	if err := h.users.UpdatePassword(r.Context(), uid, passwordHash); err != nil {
+		httpx.Error(w, http.StatusInternalServerError, 50074, "failed to update password")
+		return
+	}
+
+	httpx.OK(w, map[string]any{"uid": uid}, "password updated")
 }
 
 func normalizeAdminUpdateUser(w http.ResponseWriter, existing *models.User, req adminUpdateUserRequest) (repository.AdminUpdateUserParams, bool) {

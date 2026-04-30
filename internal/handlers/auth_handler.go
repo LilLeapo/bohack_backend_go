@@ -77,9 +77,8 @@ type authResponse struct {
 }
 
 type sendVerificationCodeResponse struct {
-	ExpireIn  int64  `json:"expire_in"`
-	Delivery  string `json:"delivery"`
-	DebugCode string `json:"debug_code,omitempty"`
+	ExpireIn int64  `json:"expire_in"`
+	Delivery string `json:"delivery"`
 }
 
 func NewAuthHandler(
@@ -136,13 +135,15 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if len(req.VerificationCode) != 6 {
-		httpx.Error(w, http.StatusBadRequest, 42212, "verification_code must be 6 digits")
-		return
-	}
-	if _, err := h.validateVerificationCode(r.Context(), req.Email, "register", req.VerificationCode); err != nil {
-		httpx.Error(w, http.StatusBadRequest, 40006, "verification code is invalid or expired")
-		return
+	if h.requireRegisterVerification {
+		if len(req.VerificationCode) != 6 {
+			httpx.Error(w, http.StatusBadRequest, 42212, "verification_code must be 6 digits")
+			return
+		}
+		if _, err := h.validateVerificationCode(r.Context(), req.Email, "register", req.VerificationCode); err != nil {
+			httpx.Error(w, http.StatusBadRequest, 40006, "verification code is invalid or expired")
+			return
+		}
 	}
 
 	exists, err := h.users.ExistsByUsername(r.Context(), req.Username)
@@ -443,9 +444,6 @@ func (h *AuthHandler) handleSendVerificationCode(w http.ResponseWriter, r *http.
 		response := sendVerificationCodeResponse{
 			ExpireIn: int64(h.verificationTTL.Seconds()),
 			Delivery: h.mailer.Mode(),
-		}
-		if h.mailer.Mode() == "console" {
-			response.DebugCode = code
 		}
 		httpx.OK(w, response, "verification code sent")
 		return

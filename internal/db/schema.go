@@ -14,6 +14,13 @@ import (
 func EnsureSchema(ctx context.Context, gormDB *gorm.DB, cfg config.Config) error {
 	tx := gormDB.WithContext(ctx)
 
+	switch tx.Dialector.Name() {
+	case "postgres":
+		if err := applyPostgresPreMigrate(tx); err != nil {
+			return err
+		}
+	}
+
 	if err := tx.AutoMigrate(
 		&models.User{},
 		&models.VerificationCode{},
@@ -70,9 +77,41 @@ func EnsureSchema(ctx context.Context, gormDB *gorm.DB, cfg config.Config) error
 	return nil
 }
 
+func applyPostgresPreMigrate(tx *gorm.DB) error {
+	stmts := []string{
+		// Older schemas created implicit UNIQUE constraints with *_key names. GORM v1.31
+		// tries to drop generated uni_* constraints for unique columns before recreating
+		// unique indexes, which crashes when those legacy names don't match.
+		`ALTER TABLE IF EXISTS users DROP CONSTRAINT IF EXISTS users_username_key`,
+		`ALTER TABLE IF EXISTS users DROP CONSTRAINT IF EXISTS users_email_key`,
+		`ALTER TABLE IF EXISTS events DROP CONSTRAINT IF EXISTS events_slug_key`,
+		`ALTER TABLE IF EXISTS verification_codes DROP CONSTRAINT IF EXISTS verification_codes_email_code_type_key`,
+		`ALTER TABLE IF EXISTS event_registrations DROP CONSTRAINT IF EXISTS event_registrations_event_id_user_id_key`,
+	}
+	for _, stmt := range stmts {
+		if err := tx.Exec(stmt).Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func applyPostgresPostMigrate(tx *gorm.DB) error {
 	stmts := []string{
-		`ALTER TABLE event_registrations ALTER COLUMN extra TYPE jsonb USING extra::jsonb`,
+		`DO $$ BEGIN
+			IF EXISTS (
+				SELECT 1
+				FROM information_schema.columns
+				WHERE table_schema = current_schema()
+					AND table_name = 'event_registrations'
+					AND column_name = 'extra'
+					AND udt_name <> 'jsonb'
+			) THEN
+				ALTER TABLE event_registrations ALTER COLUMN extra DROP DEFAULT;
+				ALTER TABLE event_registrations ALTER COLUMN extra TYPE jsonb USING extra::jsonb;
+			END IF;
+			ALTER TABLE event_registrations ALTER COLUMN extra SET DEFAULT '{}'::jsonb;
+		END $$;`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_events_single_current ON events (is_current) WHERE is_current`,
 		`DO $$ BEGIN
 			IF NOT EXISTS (

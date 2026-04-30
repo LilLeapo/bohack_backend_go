@@ -88,6 +88,7 @@ func NewRouter(
 			r.Get("/users", adminUserHandler.List)
 			r.Get("/users/{userID}", adminUserHandler.Detail)
 			r.Patch("/users/{userID}", adminUserHandler.Update)
+			r.Patch("/users/{userID}/password", adminUserHandler.UpdatePassword)
 			r.Get("/events", adminEventHandler.List)
 			r.Get("/events/{eventID}", adminEventHandler.Detail)
 			r.Post("/events", adminEventHandler.Create)

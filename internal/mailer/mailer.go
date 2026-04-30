@@ -1,13 +1,18 @@
 package mailer
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"fmt"
+	"html/template"
 	"log"
+	"mime"
+	"mime/quotedprintable"
 	"net/mail"
 	"net/smtp"
 	"strings"
+	"time"
 )
 
 type Mailer interface {
@@ -23,12 +28,12 @@ func NewConsoleMailer() Mailer {
 }
 
 func (m *ConsoleMailer) SendVerificationCode(_ context.Context, email, code, codeType string) error {
-	log.Printf("[mail:console] send verification code email=%s type=%s code=%s", email, codeType, code)
+	log.Printf("[mail:console] accepted verification code email=%s type=%s", maskEmail(email), codeType)
 	return nil
 }
 
 func (m *ConsoleMailer) SendAttendanceConfirmation(_ context.Context, email, name, eventTitle, confirmURL, declineURL string) error {
-	log.Printf("[mail:console] send attendance confirmation email=%s name=%s event=%s confirm=%s decline=%s", email, name, eventTitle, confirmURL, declineURL)
+	log.Printf("[mail:console] accepted attendance confirmation email=%s name=%s event=%s", maskEmail(email), name, eventTitle)
 	return nil
 }
 
@@ -55,53 +60,56 @@ func NewSMTPMailer(host string, port int, username, password, from string) Maile
 }
 
 func (m *SMTPMailer) SendVerificationCode(_ context.Context, email, code, codeType string) error {
-	subject := "BoHack verification code"
-	purpose := "verification"
-	switch strings.TrimSpace(strings.ToLower(codeType)) {
-	case "register":
-		purpose = "registration"
-	case "reset":
-		purpose = "password reset"
+	message, err := buildVerificationCodeEmail(code, codeType)
+	if err != nil {
+		return err
 	}
 
-	body := fmt.Sprintf(
-		"Your BoHack %s code is: %s\n\nIf you did not request this code, you can ignore this email.\n",
-		purpose,
-		code,
-	)
-
-	return m.send(email, subject, body)
+	log.Printf("[mail:smtp] sending verification code email=%s type=%s host=%s port=%d", maskEmail(email), codeType, m.host, m.port)
+	if err := m.send(email, message); err != nil {
+		log.Printf("[mail:smtp] send verification code failed email=%s type=%s host=%s port=%d err=%v", maskEmail(email), codeType, m.host, m.port, err)
+		return err
+	}
+	log.Printf("[mail:smtp] send verification code accepted email=%s type=%s host=%s port=%d", maskEmail(email), codeType, m.host, m.port)
+	return nil
 }
 
 func (m *SMTPMailer) SendAttendanceConfirmation(_ context.Context, email, name, eventTitle, confirmURL, declineURL string) error {
-	subject := "BoHack attendance confirmation"
-	if strings.TrimSpace(eventTitle) != "" {
-		subject = eventTitle + " attendance confirmation"
-	}
-	if strings.TrimSpace(name) == "" {
-		name = "there"
+	message, err := buildAttendanceConfirmationEmail(name, eventTitle, confirmURL, declineURL)
+	if err != nil {
+		return err
 	}
 
-	body := fmt.Sprintf(
-		"Hi %s,\n\nPlease confirm whether you can attend %s.\n\nConfirm attendance:\n%s\n\nUnable to attend:\n%s\n\nIf you did not expect this email, you can ignore it.\n",
-		name,
-		eventTitle,
-		confirmURL,
-		declineURL,
-	)
-
-	return m.send(email, subject, body)
+	log.Printf("[mail:smtp] sending attendance confirmation email=%s event=%s host=%s port=%d", maskEmail(email), eventTitle, m.host, m.port)
+	if err := m.send(email, message); err != nil {
+		log.Printf("[mail:smtp] send attendance confirmation failed email=%s event=%s host=%s port=%d err=%v", maskEmail(email), eventTitle, m.host, m.port, err)
+		return err
+	}
+	log.Printf("[mail:smtp] send attendance confirmation accepted email=%s event=%s host=%s port=%d", maskEmail(email), eventTitle, m.host, m.port)
+	return nil
 }
 
-func (m *SMTPMailer) send(to, subject, body string) error {
-	message := strings.Join([]string{
+func (m *SMTPMailer) send(to string, message emailMessage) error {
+	boundary := fmt.Sprintf("bohack-%d", time.Now().UnixNano())
+	raw := strings.Join([]string{
 		"From: " + m.from,
 		"To: " + to,
-		"Subject: " + subject,
+		"Subject: " + encodeHeader(message.subject),
 		"MIME-Version: 1.0",
-		"Content-Type: text/plain; charset=UTF-8",
+		"Content-Type: multipart/alternative; boundary=\"" + boundary + "\"",
 		"",
-		body,
+		"--" + boundary,
+		"Content-Type: text/plain; charset=UTF-8",
+		"Content-Transfer-Encoding: quoted-printable",
+		"",
+		encodeQuotedPrintable(message.text),
+		"--" + boundary,
+		"Content-Type: text/html; charset=UTF-8",
+		"Content-Transfer-Encoding: quoted-printable",
+		"",
+		encodeQuotedPrintable(message.html),
+		"--" + boundary + "--",
+		"",
 	}, "\r\n")
 
 	addr := fmt.Sprintf("%s:%d", m.host, m.port)
@@ -109,10 +117,10 @@ func (m *SMTPMailer) send(to, subject, body string) error {
 	recipients := []string{to}
 
 	if m.port == 465 {
-		return m.sendImplicitTLS(addr, from, recipients, []byte(message))
+		return m.sendImplicitTLS(addr, from, recipients, []byte(raw))
 	}
 
-	return smtp.SendMail(addr, m.auth(), from, recipients, []byte(message))
+	return smtp.SendMail(addr, m.auth(), from, recipients, []byte(raw))
 }
 
 func (m *SMTPMailer) sendImplicitTLS(addr, from string, to []string, message []byte) error {
@@ -180,6 +188,19 @@ func (m *SMTPMailer) envelopeFrom() string {
 		return m.from
 	}
 	return address.Address
+}
+
+func maskEmail(email string) string {
+	email = strings.TrimSpace(email)
+	parts := strings.Split(email, "@")
+	if len(parts) != 2 {
+		return email
+	}
+	local := parts[0]
+	if len(local) <= 2 {
+		return strings.Repeat("*", len(local)) + "@" + parts[1]
+	}
+	return local[:1] + strings.Repeat("*", len(local)-2) + local[len(local)-1:] + "@" + parts[1]
 }
 
 type implicitTLSPlainAuth struct {

@@ -68,8 +68,8 @@ Authorization: Bearer <access_token>
 }
 ```
 
-2. 本地 `MAIL_MODE=console` 时，响应里会返回 `data.debug_code`。
-3. 调 `POST /auth/register`，把 `debug_code` 填到 `verification_code`。
+2. 如果是 `MAIL_MODE=smtp`，去收件箱里拿验证码；如果是 `MAIL_MODE=console`，接口不会返回 `debug_code`，本地调试建议临时设 `REQUIRE_REGISTER_VERIFICATION=false`。
+3. 调 `POST /auth/register`，把收到的验证码填到 `verification_code`。
 
 ```json
 {

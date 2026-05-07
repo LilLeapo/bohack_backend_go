@@ -13,6 +13,7 @@ import (
 	"bohack_backend_go/internal/auth"
 	"bohack_backend_go/internal/config"
 	"bohack_backend_go/internal/db"
+	"bohack_backend_go/internal/mailer"
 	"bohack_backend_go/internal/repository"
 )
 
@@ -43,6 +44,10 @@ func (m *stubMailer) SendVerificationCode(_ context.Context, email, code, codeTy
 }
 
 func (m *stubMailer) SendAttendanceConfirmation(_ context.Context, _, _, _, _, _ string) error {
+	return nil
+}
+
+func (m *stubMailer) SendRegistrationEmail(_ context.Context, _ string, _ mailer.RegistrationEmailParams) error {
 	return nil
 }
 

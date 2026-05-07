@@ -24,6 +24,7 @@ func NewRouter(
 	adminUserHandler *handlers.AdminUserHandler,
 	registrationHandler *handlers.RegistrationHandler,
 	attendanceHandler *handlers.AttendanceHandler,
+	registrationEmailHandler *handlers.RegistrationEmailHandler,
 	attachmentHandler *handlers.AttachmentHandler,
 	adminRegistrationHandler *handlers.AdminRegistrationHandler,
 ) http.Handler {
@@ -97,6 +98,7 @@ func NewRouter(
 			r.Get("/registrations/{registrationID}", adminRegistrationHandler.Detail)
 			r.Patch("/registrations/{registrationID}", adminRegistrationHandler.Update)
 			r.Post("/registrations/{registrationID}/attendance-confirmation", attendanceHandler.AdminSend)
+			r.Post("/registrations/{registrationID}/emails/{emailType}", registrationEmailHandler.AdminSend)
 			r.Get("/registrations/{registrationID}/attachments", attachmentHandler.AdminListForRegistration)
 			r.Get("/registrations/{registrationID}/attachments/{attachmentID}/download", attachmentHandler.AdminDownload)
 			r.Patch("/registrations/{registrationID}/review", adminRegistrationHandler.Review)

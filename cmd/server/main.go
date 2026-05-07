@@ -86,6 +86,7 @@ func main() {
 		cfg.FrontendBaseURL,
 		cfg.AttendanceConfirmationTTL,
 	)
+	registrationEmailHandler := handlers.NewRegistrationEmailHandler(registrationRepo, authMailer)
 	attachmentHandler := handlers.NewAttachmentHandler(
 		eventRepo,
 		registrationRepo,
@@ -107,6 +108,7 @@ func main() {
 		adminUserHandler,
 		registrationHandler,
 		attendanceHandler,
+		registrationEmailHandler,
 		attachmentHandler,
 		adminRegistrationHandler,
 	)

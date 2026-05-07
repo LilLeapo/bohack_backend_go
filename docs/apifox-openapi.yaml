@@ -712,6 +712,33 @@ paths:
         "200":
           $ref: "#/components/responses/EnvelopeResponse"
 
+  /admin/registrations/{registrationID}/emails/{emailType}:
+    post:
+      tags: [Admin Registrations]
+      summary: Send registration email by type
+      parameters:
+        - $ref: "#/components/parameters/RegistrationID"
+        - name: emailType
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [admission, visitor, minor_admission, agreement_reminder]
+          example: admission
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminSendRegistrationEmailRequest"
+            examples:
+              admission:
+                value:
+                  confirm_url: https://bohack.top/attendance-confirm?token=abc&status=confirmed
+      responses:
+        "200":
+          $ref: "#/components/responses/EnvelopeResponse"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -1201,6 +1228,22 @@ components:
         extra:
           type: object
           additionalProperties: true
+
+    AdminSendRegistrationEmailRequest:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [admission, visitor, minor_admission, agreement_reminder]
+          description: Optional when emailType path parameter is provided.
+        confirm_url:
+          type: string
+          format: uri
+          description: Required for admission email.
+        confirmUrl:
+          type: string
+          format: uri
+          description: Camel-case alias for confirm_url.
 
     ReviewRegistrationRequest:
       type: object

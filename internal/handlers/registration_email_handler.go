@@ -4,7 +4,9 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
+	"net/url"
 	"strings"
+	"time"
 
 	"bohack_backend_go/internal/httpx"
 	"bohack_backend_go/internal/mailer"
@@ -14,8 +16,11 @@ import (
 )
 
 type RegistrationEmailHandler struct {
-	registrations *repository.RegistrationRepository
-	mailer        mailer.Mailer
+	registrations   *repository.RegistrationRepository
+	confirmations   *repository.AttendanceConfirmationRepository
+	mailer          mailer.Mailer
+	frontendBaseURL string
+	ttl             time.Duration
 }
 
 type adminSendRegistrationEmailRequest struct {
@@ -28,11 +33,17 @@ type adminSendRegistrationEmailRequest struct {
 
 func NewRegistrationEmailHandler(
 	registrations *repository.RegistrationRepository,
+	confirmations *repository.AttendanceConfirmationRepository,
 	mailer mailer.Mailer,
+	frontendBaseURL string,
+	ttl time.Duration,
 ) *RegistrationEmailHandler {
 	return &RegistrationEmailHandler{
-		registrations: registrations,
-		mailer:        mailer,
+		registrations:   registrations,
+		confirmations:   confirmations,
+		mailer:          mailer,
+		frontendBaseURL: strings.TrimRight(frontendBaseURL, "/"),
+		ttl:             ttl,
 	}
 }
 
@@ -61,12 +72,6 @@ func (h *RegistrationEmailHandler) AdminSend(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	confirmURL := strings.TrimSpace(firstNonEmpty(req.ConfirmURL, req.ConfirmURLCamel))
-	if kind.RequiresConfirmURL() && confirmURL == "" {
-		httpx.Error(w, http.StatusBadRequest, 42291, "confirm_url is required for admission email")
-		return
-	}
-
 	registration, err := h.registrations.GetByID(r.Context(), registrationID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -75,6 +80,28 @@ func (h *RegistrationEmailHandler) AdminSend(w http.ResponseWriter, r *http.Requ
 		}
 		httpx.Error(w, http.StatusInternalServerError, 50032, "failed to load registration")
 		return
+	}
+
+	var confirmation any
+	confirmURL := strings.TrimSpace(firstNonEmpty(req.ConfirmURL, req.ConfirmURLCamel))
+	if kind.RequiresConfirmURL() && confirmURL == "" {
+		token, tokenHash, err := generateAttendanceToken()
+		if err != nil {
+			httpx.Error(w, http.StatusInternalServerError, 50080, "failed to generate confirmation token")
+			return
+		}
+		item, err := h.confirmations.Create(r.Context(), repository.CreateAttendanceConfirmationParams{
+			RegistrationID: registration.ID,
+			UserID:         registration.UserID,
+			TokenHash:      tokenHash,
+			ExpiresAt:      time.Now().UTC().Add(h.ttl),
+		})
+		if err != nil {
+			httpx.Error(w, http.StatusInternalServerError, 50081, "failed to create attendance confirmation")
+			return
+		}
+		confirmation = item
+		confirmURL = h.attendanceURL(token, "confirmed")
 	}
 
 	if err := h.mailer.SendRegistrationEmail(
@@ -91,8 +118,21 @@ func (h *RegistrationEmailHandler) AdminSend(w http.ResponseWriter, r *http.Requ
 	}
 
 	httpx.OK(w, map[string]any{
-		"delivery":   h.mailer.Mode(),
-		"emailType":  string(kind),
-		"confirmUrl": consoleOnlyURL(h.mailer.Mode(), confirmURL),
+		"confirmation": confirmation,
+		"delivery":     h.mailer.Mode(),
+		"emailType":    string(kind),
+		"confirmUrl":   consoleOnlyURL(h.mailer.Mode(), confirmURL),
 	}, "registration email sent")
+}
+
+func (h *RegistrationEmailHandler) attendanceURL(token, status string) string {
+	u, err := url.Parse(h.frontendBaseURL + "/attendance-confirm")
+	if err != nil {
+		return h.frontendBaseURL + "/attendance-confirm?token=" + url.QueryEscape(token) + "&status=" + url.QueryEscape(status)
+	}
+	q := u.Query()
+	q.Set("token", token)
+	q.Set("status", status)
+	u.RawQuery = q.Encode()
+	return u.String()
 }

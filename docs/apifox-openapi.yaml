@@ -733,6 +733,8 @@ paths:
               $ref: "#/components/schemas/AdminSendRegistrationEmailRequest"
             examples:
               admission:
+                value: {}
+              admission_with_override:
                 value:
                   confirm_url: https://bohack.top/attendance-confirm?token=abc&status=confirmed
       responses:
@@ -1239,7 +1241,7 @@ components:
         confirm_url:
           type: string
           format: uri
-          description: Required for admission email.
+          description: Optional override for admission email. If omitted, backend generates an attendance confirmation link.
         confirmUrl:
           type: string
           format: uri

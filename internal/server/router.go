@@ -59,6 +59,7 @@ func NewRouter(
 		router.Get("/events/{slug}", eventHandler.GetPublicBySlug)
 		router.Get("/attendance/confirm", attendanceHandler.Confirm)
 		router.Post("/attendance/confirm", attendanceHandler.Confirm)
+		router.Post("/attendance/confirm/upload", attendanceHandler.ConfirmUpload)
 
 		router.With(authMiddleware).Get("/user/profile", profileHandler.Me)
 		router.With(authMiddleware).Patch("/user/profile", profileHandler.Update)

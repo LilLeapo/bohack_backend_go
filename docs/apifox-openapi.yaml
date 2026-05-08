@@ -452,7 +452,8 @@ paths:
   /attendance/confirm:
     get:
       tags: [Attendance]
-      summary: Confirm or decline attendance by query token
+      summary: Decline attendance by query token
+      description: Confirming attendance requires uploading the signed confirmation file via /attendance/confirm/upload.
       security: []
       parameters:
         - name: token
@@ -466,14 +467,15 @@ paths:
           required: true
           schema:
             type: string
-            enum: [confirmed, declined]
-          example: confirmed
+            enum: [declined]
+          example: declined
       responses:
         "200":
           $ref: "#/components/responses/EnvelopeResponse"
     post:
       tags: [Attendance]
-      summary: Confirm or decline attendance by JSON body
+      summary: Decline attendance by JSON body
+      description: Confirming attendance requires uploading the signed confirmation file via /attendance/confirm/upload.
       security: []
       requestBody:
         required: true
@@ -482,14 +484,25 @@ paths:
             schema:
               $ref: "#/components/schemas/AttendanceConfirmRequest"
             examples:
-              confirm:
-                value:
-                  token: replace-with-token-from-email
-                  status: confirmed
               decline:
                 value:
                   token: replace-with-token-from-email
                   status: declined
+      responses:
+        "200":
+          $ref: "#/components/responses/EnvelopeResponse"
+
+  /attendance/confirm/upload:
+    post:
+      tags: [Attendance]
+      summary: Confirm attendance with signed confirmation file
+      security: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/AttendanceConfirmUploadRequest"
       responses:
         "200":
           $ref: "#/components/responses/EnvelopeResponse"
@@ -1131,8 +1144,20 @@ components:
           type: string
         status:
           type: string
-          enum: [confirmed, declined]
+          enum: [declined]
       required: [token, status]
+
+    AttendanceConfirmUploadRequest:
+      type: object
+      properties:
+        token:
+          type: string
+          description: Token from attendance confirmation email.
+        file:
+          type: string
+          format: binary
+          description: Hand-signed 2026 risk notice and participation confirmation file.
+      required: [token, file]
 
     CreateEventRequest:
       type: object

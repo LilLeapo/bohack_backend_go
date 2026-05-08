@@ -164,6 +164,7 @@ SQLITE_PATH=./storage/debug.sqlite bash ./run-sqlite-dev.sh
   - `MAIL_MODE=smtp`
 - `console` 模式下不会实际投递邮件，只记录发送动作日志；`smtp` 模式会记录 SMTP 发送开始、失败和服务端接受日志，便于排查发信问题。
 - 管理员可通过 `POST /admin/registrations/{registrationID}/emails/{emailType}` 触发指定报名邮件发送；`emailType` 支持 `admission`、`visitor`、`minor_admission`、`agreement_reminder`。发送规则由调用方决定，后端只按指定类型发送。`admission` 会自动生成参赛确认链接；也可在测试或特殊场景通过 `confirm_url` 覆盖链接。
+- 参赛者确认参赛需要上传手写签署后的确认书：前端使用邮件 token 调用 `POST /attendance/confirm/upload`，以 `multipart/form-data` 提交 `token` 和 `file`。后端会保存附件为 `risk_confirmation` 并将确认状态置为 `confirmed`。无法参赛仍使用 `/attendance/confirm` 提交 `declined`。
 - 录取邮件本地预览：
   `go run ./cmd/email-preview -type admission -name 张三 -confirm-url "https://bohack.top/attendance-confirm?token=preview&status=confirmed"`
   预览文件输出到 `tmp/email-previews/admission.html`。

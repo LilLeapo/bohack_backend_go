@@ -82,9 +82,12 @@ func main() {
 	attendanceHandler := handlers.NewAttendanceHandler(
 		registrationRepo,
 		attendanceConfirmationRepo,
+		attachmentRepo,
 		authMailer,
 		cfg.FrontendBaseURL,
 		cfg.AttendanceConfirmationTTL,
+		cfg.AttachmentDir,
+		cfg.MaxUploadBytes,
 	)
 	registrationEmailHandler := handlers.NewRegistrationEmailHandler(
 		registrationRepo,

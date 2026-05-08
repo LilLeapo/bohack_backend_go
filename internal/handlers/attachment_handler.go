@@ -406,7 +406,11 @@ func (h *AttachmentHandler) loadCurrentUserRegistration(w http.ResponseWriter, r
 }
 
 func (h *AttachmentHandler) prepareAttachmentPath(registrationID int64, ext string) (string, string, error) {
-	dir := filepath.Join(h.attachmentDir, strconv.FormatInt(registrationID, 10))
+	return prepareAttachmentPath(h.attachmentDir, registrationID, ext)
+}
+
+func prepareAttachmentPath(attachmentDir string, registrationID int64, ext string) (string, string, error) {
+	dir := filepath.Join(attachmentDir, strconv.FormatInt(registrationID, 10))
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", "", err
 	}
@@ -564,6 +568,12 @@ func randomHex(size int) (string, error) {
 
 func copyUploadedFile(dst *os.File, src io.Reader) (int64, error) {
 	return io.Copy(dst, src)
+}
+
+func cleanupAttachmentFile(absPath string) {
+	if rmErr := os.Remove(absPath); rmErr != nil && !errors.Is(rmErr, os.ErrNotExist) {
+		log.Printf("[attachment:upload] cleanup failed path=%s err=%v", absPath, rmErr)
+	}
 }
 
 type multipartFile interface {

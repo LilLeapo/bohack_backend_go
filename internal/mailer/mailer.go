@@ -293,7 +293,7 @@ var attendanceEmailTemplate = template.Must(template.New("attendance-email").Par
                 <tr>
                   <td style="padding:18px 18px 20px;border-radius:20px;background:#fffaf0;color:#4b4036;font-size:15px;line-height:1.75;border:1px solid rgba(36,31,26,0.08);">
                     <div style="margin-bottom:8px;color:#241f1a;font-weight:800;">1. 确认参赛</div>
-                    请务必于<strong>5月11日17点前</strong>点击下方链接确认参赛，并上传手写签署后的《2026智能创新黑客松活动风险告知与参与确认书》，以确认您的参赛资格。如因个人安排变动无法如期参与，请回复本邮件告知<strong>【姓名 + 无法参赛 + 简要原因】</strong>，我们将尽力为您协调或提供协助。逾期未确认将视为自动放弃。
+                    请务必于<strong>5月11日17点前</strong>点击下方链接确认参赛，并上传手写签署后的《2026智能创新黑客松活动风险告知与参与确认书》（见附件），以确认您的参赛资格。如因个人安排变动无法如期参与，请回复本邮件告知<strong>【姓名 + 无法参赛 + 简要原因】</strong>，我们将尽力为您协调或提供协助。逾期未确认将视为自动放弃。
                     <a href="{{.ConfirmURL}}" style="display:block;margin-top:16px;padding:16px 22px;border-radius:999px;background:#cff65d;color:#241f1a;text-align:center;text-decoration:none;font-weight:800;">确认参赛并上传确认书 ↗</a>
                   </td>
                 </tr>
@@ -514,7 +514,7 @@ func buildAttendanceConfirmationEmail(name, eventTitle, confirmURL, declineURL s
 - 报到时间：5月22日（周五）16:00
 
 二、后续步骤与须知
-1. 确认参赛：请务必于【5月11日17点前】点击下方链接确认参赛，并上传手写签署后的《2026智能创新黑客松活动风险告知与参与确认书》，以确认您的参赛资格。如因个人安排变动无法如期参与，请回复本邮件告知【姓名 + 无法参赛 + 简要原因】，我们将尽力为您协调或提供协助。逾期未确认将视为自动放弃。
+1. 确认参赛：请务必于【5月11日17点前】点击下方链接确认参赛，并上传手写签署后的《2026智能创新黑客松活动风险告知与参与确认书》（见附件），以确认您的参赛资格。如因个人安排变动无法如期参与，请回复本邮件告知【姓名 + 无法参赛 + 简要原因】，我们将尽力为您协调或提供协助。逾期未确认将视为自动放弃。
 确认链接：%s
 2. 添加小助手微信：为确保信息畅通，请使用微信扫描以下二维码或搜索“15522512264”添加BoHack官方小助手，添加时请将昵称修改为“2026智能创新黑客松-姓名-学校/单位”，后续事项将通过该微信进行通知。
 （小助手二维码）
@@ -601,7 +601,7 @@ func buildMinorAdmissionEmail(name, confirmURL string) (emailMessage, error) {
               </table>
               <div style="margin:30px 0 14px;font-size:13px;letter-spacing:0.12em;text-transform:uppercase;color:#7c6f63;font-weight:800;">二、后续步骤与须知</div>
               <table role="presentation" width="100%%" cellspacing="0" cellpadding="0" style="border-collapse:separate;border-spacing:0 12px;">
-                <tr><td style="padding:16px 18px;border-radius:18px;background:#fffaf0;border:1px solid rgba(36,31,26,0.08);"><strong style="color:#241f1a;">1. 确认参赛与签署家长知情同意书：</strong>由于您的孩子为未成年人，参赛需获得监护人的书面同意。请您务必于<strong style="color:#241f1a;">5月11日17点前</strong>点击下方链接确认参赛，认真阅读并上传手写签署后的《2026智能创新黑客松活动风险告知与参与确认书》，以确认孩子的参赛资格。如因个人安排变动无法如期参与，请回复本邮件告知<strong style="color:#241f1a;">【姓名 + 无法参赛 + 简要原因】</strong>，我们将尽力为您协调或提供协助。逾期未确认将视为自动放弃。<a href="%s" style="display:block;margin-top:16px;padding:16px 22px;border-radius:999px;background:#cff65d;color:#241f1a;text-align:center;text-decoration:none;font-weight:800;">确认参赛并上传确认书 ↗</a></td></tr>
+                <tr><td style="padding:16px 18px;border-radius:18px;background:#fffaf0;border:1px solid rgba(36,31,26,0.08);"><strong style="color:#241f1a;">1. 确认参赛与签署家长知情同意书：</strong>由于您的孩子为未成年人，参赛需获得监护人的书面同意。请您务必于<strong style="color:#241f1a;">5月11日17点前</strong>点击下方链接确认参赛，认真阅读并上传手写签署后的《2026智能创新黑客松活动风险告知与参与确认书》（见附件），以确认孩子的参赛资格。如因个人安排变动无法如期参与，请回复本邮件告知<strong style="color:#241f1a;">【姓名 + 无法参赛 + 简要原因】</strong>，我们将尽力为您协调或提供协助。逾期未确认将视为自动放弃。<a href="%s" style="display:block;margin-top:16px;padding:16px 22px;border-radius:999px;background:#cff65d;color:#241f1a;text-align:center;text-decoration:none;font-weight:800;">确认参赛并上传确认书 ↗</a></td></tr>
                 <tr><td style="padding:16px 18px;border-radius:18px;background:#fffaf0;border:1px solid rgba(36,31,26,0.08);"><strong style="color:#241f1a;">2. 添加小助手微信：</strong> 为确保信息畅通，请使用微信扫描以下二维码或搜索“15522512264”添加BoHack官方小助手，添加时验证信息备注格式为“2026智能创新黑客松-姓名-学校/单位”，后续事项将通过该微信进行通知。<img src="cid:%s" alt="BoHack 小助手微信二维码" width="180" style="display:block;margin-top:14px;width:180px;max-width:100%%;height:auto;border-radius:22px;border:1px solid rgba(36,31,26,0.12);background:#fffdf6;"></td></tr>
                 <tr><td style="padding:16px 18px;border-radius:18px;background:#fffaf0;border:1px solid rgba(36,31,26,0.08);"><strong style="color:#241f1a;">3. 活动详情：</strong> 关于活动的详细日程、规则、赛题发布等信息，请持续关注小助手微信消息及BoHack官方微信公众号。</td></tr>
               </table>
@@ -715,7 +715,7 @@ func minorAdmissionText(subject, name, confirmURL string) string {
 - 报到时间：5月22日（周五）16:00
 
 二、后续步骤与须知
-1. 确认参赛与签署家长知情同意书：由于您的孩子为未成年人，参赛需获得监护人的书面同意。请您务必于【5月11日17点前】点击下方链接确认参赛，认真阅读并上传手写签署后的《2026智能创新黑客松活动风险告知与参与确认书》，以确认孩子的参赛资格。如因个人安排变动无法如期参与，请回复本邮件告知【姓名 + 无法参赛 + 简要原因】，我们将尽力为您协调或提供协助。逾期未确认将视为自动放弃。
+1. 确认参赛与签署家长知情同意书：由于您的孩子为未成年人，参赛需获得监护人的书面同意。请您务必于【5月11日17点前】点击下方链接确认参赛，认真阅读并上传手写签署后的《2026智能创新黑客松活动风险告知与参与确认书》（见附件），以确认孩子的参赛资格。如因个人安排变动无法如期参与，请回复本邮件告知【姓名 + 无法参赛 + 简要原因】，我们将尽力为您协调或提供协助。逾期未确认将视为自动放弃。
 确认链接：%s
 2. 添加小助手微信：为确保信息畅通，请使用微信扫描邮件中的二维码或搜索“15522512264”添加BoHack官方小助手，添加时验证信息备注格式为“2026智能创新黑客松-姓名-学校/单位”，后续事项将通过该微信进行通知。
 3. 活动详情：关于活动的详细日程、规则、赛题发布等信息，请持续关注小助手微信消息及BoHack官方微信公众号。

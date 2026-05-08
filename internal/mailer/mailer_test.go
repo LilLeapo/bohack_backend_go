@@ -45,7 +45,7 @@ func TestBuildAttendanceConfirmationEmailUsesAdmissionCopy(t *testing.T) {
 	if !message.parts[0].inline || message.parts[0].contentID != helperQRCodeContentID {
 		t.Fatalf("first part = %#v, want inline helper qr", message.parts[0])
 	}
-	assertContains(t, message.parts[1].filename, "2026智能创新黑客松活动风险告知与参与确认书.docx")
+	assertContains(t, message.parts[1].filename, "2026智能创新黑客松活动风险告知与参与确认书.pdf")
 }
 
 func TestBuildRegistrationEmailSupportsCallableKinds(t *testing.T) {
@@ -55,7 +55,7 @@ func TestBuildRegistrationEmailSupportsCallableKinds(t *testing.T) {
 		wantParts int
 	}{
 		{RegistrationEmailVisitor, "体验者", 1},
-		{RegistrationEmailMinorAdmission, "家长", 1},
+		{RegistrationEmailMinorAdmission, "家长", 2},
 		{RegistrationEmailAgreementReminder, "赛前确认", 2},
 	}
 

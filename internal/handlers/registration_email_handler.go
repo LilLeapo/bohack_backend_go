@@ -23,6 +23,8 @@ type RegistrationEmailHandler struct {
 	ttl             time.Duration
 }
 
+const registrationEmailConfirmationDeadlineOffset = 72 * time.Hour
+
 type adminSendRegistrationEmailRequest struct {
 	Type            string `json:"type"`
 	EmailType       string `json:"email_type"`
@@ -83,6 +85,9 @@ func (h *RegistrationEmailHandler) AdminSend(w http.ResponseWriter, r *http.Requ
 	}
 
 	var confirmation any
+	sentAt := time.Now().UTC()
+	confirmationExpiresAt := sentAt.Add(h.ttl)
+	emailDeadlineAt := sentAt.Add(registrationEmailConfirmationDeadlineOffset)
 	confirmURL := strings.TrimSpace(firstNonEmpty(req.ConfirmURL, req.ConfirmURLCamel))
 	if kind.RequiresConfirmURL() && confirmURL == "" {
 		token, tokenHash, err := generateAttendanceToken()
@@ -94,7 +99,8 @@ func (h *RegistrationEmailHandler) AdminSend(w http.ResponseWriter, r *http.Requ
 			RegistrationID: registration.ID,
 			UserID:         registration.UserID,
 			TokenHash:      tokenHash,
-			ExpiresAt:      time.Now().UTC().Add(h.ttl),
+			SentAt:         sentAt,
+			ExpiresAt:      confirmationExpiresAt,
 		})
 		if err != nil {
 			httpx.Error(w, http.StatusInternalServerError, 50081, "failed to create attendance confirmation")
@@ -108,9 +114,11 @@ func (h *RegistrationEmailHandler) AdminSend(w http.ResponseWriter, r *http.Requ
 		r.Context(),
 		registration.EmailSnapshot,
 		mailer.RegistrationEmailParams{
-			Kind:       kind,
-			Name:       registration.RealName,
-			ConfirmURL: confirmURL,
+			Kind:                 kind,
+			Name:                 registration.RealName,
+			ConfirmURL:           confirmURL,
+			SentAt:               sentAt,
+			ConfirmationDeadline: emailDeadlineAt,
 		},
 	); err != nil {
 		httpx.Error(w, http.StatusInternalServerError, 50090, "failed to send registration email")

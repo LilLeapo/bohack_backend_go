@@ -19,7 +19,7 @@ import (
 
 type Mailer interface {
 	SendVerificationCode(ctx context.Context, email, code, codeType string) error
-	SendAttendanceConfirmation(ctx context.Context, email, name, eventTitle, confirmURL, declineURL string) error
+	SendAttendanceConfirmation(ctx context.Context, email, name, eventTitle, confirmURL, declineURL string, sentAt, confirmationDeadline time.Time) error
 	SendRegistrationEmail(ctx context.Context, email string, params RegistrationEmailParams) error
 	Mode() string
 }
@@ -41,9 +41,11 @@ var emailAssets embed.FS
 type RegistrationEmailKind string
 
 type RegistrationEmailParams struct {
-	Kind       RegistrationEmailKind
-	Name       string
-	ConfirmURL string
+	Kind                 RegistrationEmailKind
+	Name                 string
+	ConfirmURL           string
+	SentAt               time.Time
+	ConfirmationDeadline time.Time
 }
 
 type EmailPreview struct {
@@ -105,7 +107,7 @@ func (m *ConsoleMailer) SendVerificationCode(_ context.Context, email, code, cod
 	return nil
 }
 
-func (m *ConsoleMailer) SendAttendanceConfirmation(_ context.Context, email, name, eventTitle, confirmURL, declineURL string) error {
+func (m *ConsoleMailer) SendAttendanceConfirmation(_ context.Context, email, name, eventTitle, confirmURL, declineURL string, sentAt, confirmationDeadline time.Time) error {
 	log.Printf("[mail:console] accepted attendance confirmation email=%s name=%s event=%s", maskEmail(email), name, eventTitle)
 	return nil
 }
@@ -167,6 +169,8 @@ type attendanceEmailData struct {
 	Subject          string
 	Name             string
 	ConfirmURL       string
+	DeadlineText     string
+	SentDateText     string
 	QRCodeContentID  string
 	AttachmentName   string
 	AttachmentNotice string
@@ -235,7 +239,7 @@ var attendanceEmailTemplate = template.Must(template.New("attendance-email").Par
   <title>{{.Subject}}</title>
 </head>
 <body style="margin:0;background:#241f1a;color:#f7f1e5;font-family:'Space Grotesk','Noto Sans SC','PingFang SC','Microsoft YaHei',Arial,sans-serif;">
-  <div style="display:none;overflow:hidden;line-height:1px;opacity:0;max-height:0;max-width:0;">欢迎正式加入2026智能创新黑客松，请在5月11日17点前确认参赛。</div>
+  <div style="display:none;overflow:hidden;line-height:1px;opacity:0;max-height:0;max-width:0;">欢迎正式加入2026智能创新黑客松，请在{{.DeadlineText}}确认参赛。</div>
   <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#241f1a;">
     <tr>
       <td align="center" style="padding:36px 16px;">
@@ -293,7 +297,7 @@ var attendanceEmailTemplate = template.Must(template.New("attendance-email").Par
                 <tr>
                   <td style="padding:18px 18px 20px;border-radius:20px;background:#fffaf0;color:#4b4036;font-size:15px;line-height:1.75;border:1px solid rgba(36,31,26,0.08);">
                     <div style="margin-bottom:8px;color:#241f1a;font-weight:800;">1. 确认参赛</div>
-                    请务必于<strong>5月11日17点前</strong>点击下方链接确认参赛，并上传手写签署后的《2026智能创新黑客松活动风险告知与参与确认书》（见附件），以确认您的参赛资格。如因个人安排变动无法如期参与，请回复本邮件告知<strong>【姓名 + 无法参赛 + 简要原因】</strong>，我们将尽力为您协调或提供协助。逾期未确认将视为自动放弃。
+                    请务必于<strong>{{.DeadlineText}}</strong>点击下方链接确认参赛，并上传手写签署后的《2026智能创新黑客松活动风险告知与参与确认书》（见附件），以确认您的参赛资格。如因个人安排变动无法如期参与，请回复本邮件告知<strong>【姓名 + 无法参赛 + 简要原因】</strong>，我们将尽力为您协调或提供协助。逾期未确认将视为自动放弃。
                     <a href="{{.ConfirmURL}}" style="display:block;margin-top:16px;padding:16px 22px;border-radius:999px;background:#cff65d;color:#241f1a;text-align:center;text-decoration:none;font-weight:800;">确认参赛并上传确认书 ↗</a>
                   </td>
                 </tr>
@@ -315,7 +319,7 @@ var attendanceEmailTemplate = template.Must(template.New("attendance-email").Par
               <p style="margin:20px 0 0;color:#4b4036;font-size:15px;line-height:1.85;">九河下梢，海河之畔，创新的潮水正奔腾涌动。我们诚邀您，成为这浪潮中最激越的一脉；我们期待您，带着智慧的星火与不羁的创意而来，用42小时将奇思淬炼为真；我们更将与您一同，将璀璨的成果推上世界瞩目的舞台。天津已准备好见证您的光芒，世界亦是。</p>
               <p style="margin:18px 0 0;color:#4b4036;font-size:15px;line-height:1.75;">如有任何问题，欢迎随时回复本邮件或添加小助手微信咨询。</p>
               <p style="margin:18px 0 0;color:#7c6f63;font-size:13px;line-height:1.7;">{{.AttachmentNotice}}</p>
-              <p style="margin:24px 0 0;color:#241f1a;font-size:15px;line-height:1.7;font-weight:800;">BoHack组委会<br>2026年5月8日</p>
+              <p style="margin:24px 0 0;color:#241f1a;font-size:15px;line-height:1.7;font-weight:800;">BoHack组委会<br>{{.SentDateText}}</p>
               <p style="margin:22px 0 0;color:#8b8177;font-size:13px;line-height:1.7;">如果按钮无法打开，请复制链接到浏览器：{{.ConfirmURL}}</p>
               <div style="margin-top:30px;padding-top:18px;border-top:1px solid rgba(36,31,26,0.12);font-family:'JetBrains Mono','SFMono-Regular',Consolas,monospace;font-size:12px;letter-spacing:0.08em;color:#6a5f55;">
                 天津 / 2026.05.22-31 · WIE 2026 OFFICIAL TRACK
@@ -381,8 +385,8 @@ func (m *SMTPMailer) SendVerificationCode(_ context.Context, email, code, codeTy
 	return nil
 }
 
-func (m *SMTPMailer) SendAttendanceConfirmation(_ context.Context, email, name, eventTitle, confirmURL, declineURL string) error {
-	message, err := buildAttendanceConfirmationEmail(name, eventTitle, confirmURL, declineURL)
+func (m *SMTPMailer) SendAttendanceConfirmation(_ context.Context, email, name, eventTitle, confirmURL, declineURL string, sentAt, confirmationDeadline time.Time) error {
+	message, err := buildAttendanceConfirmationEmail(name, eventTitle, confirmURL, declineURL, sentAt, confirmationDeadline)
 	if err != nil {
 		return err
 	}
@@ -465,11 +469,18 @@ func buildVerificationCodeEmail(code, codeType string) (emailMessage, error) {
 func buildRegistrationEmail(params RegistrationEmailParams) (emailMessage, error) {
 	switch params.Kind {
 	case RegistrationEmailAdmission:
-		return buildAttendanceConfirmationEmail(params.Name, "", params.ConfirmURL, "")
+		return buildAttendanceConfirmationEmail(
+			params.Name,
+			"",
+			params.ConfirmURL,
+			"",
+			params.SentAt,
+			params.ConfirmationDeadline,
+		)
 	case RegistrationEmailVisitor:
 		return buildVisitorEmail(params.Name)
 	case RegistrationEmailMinorAdmission:
-		return buildMinorAdmissionEmail(params.Name, params.ConfirmURL)
+		return buildMinorAdmissionEmail(params.Name, params.ConfirmURL, params.SentAt, params.ConfirmationDeadline)
 	case RegistrationEmailAgreementReminder:
 		return buildAgreementReminderEmail(params.Name)
 	default:
@@ -477,16 +488,19 @@ func buildRegistrationEmail(params RegistrationEmailParams) (emailMessage, error
 	}
 }
 
-func buildAttendanceConfirmationEmail(name, eventTitle, confirmURL, declineURL string) (emailMessage, error) {
+func buildAttendanceConfirmationEmail(name, eventTitle, confirmURL, declineURL string, sentAt, confirmationDeadline time.Time) (emailMessage, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		name = "同学"
 	}
+	sentAt, confirmationDeadline = resolveConfirmationEmailTimes(sentAt, confirmationDeadline)
 
 	data := attendanceEmailData{
 		Subject:          "祝贺！您已正式获得2026智能创新黑客松的参赛席位！",
 		Name:             name,
 		ConfirmURL:       strings.TrimSpace(confirmURL),
+		DeadlineText:     formatConfirmationDeadlineText(confirmationDeadline),
+		SentDateText:     formatChineseDate(sentAt),
 		QRCodeContentID:  helperQRCodeContentID,
 		AttachmentName:   riskConfirmationFile,
 		AttachmentNotice: "附件：" + riskConfirmationFile,
@@ -514,7 +528,7 @@ func buildAttendanceConfirmationEmail(name, eventTitle, confirmURL, declineURL s
 - 报到时间：5月22日（周五）16:00
 
 二、后续步骤与须知
-1. 确认参赛：请务必于【5月11日17点前】点击下方链接确认参赛，并上传手写签署后的《2026智能创新黑客松活动风险告知与参与确认书》（见附件），以确认您的参赛资格。如因个人安排变动无法如期参与，请回复本邮件告知【姓名 + 无法参赛 + 简要原因】，我们将尽力为您协调或提供协助。逾期未确认将视为自动放弃。
+1. 确认参赛：请务必于【%s】点击下方链接确认参赛，并上传手写签署后的《2026智能创新黑客松活动风险告知与参与确认书》（见附件），以确认您的参赛资格。如因个人安排变动无法如期参与，请回复本邮件告知【姓名 + 无法参赛 + 简要原因】，我们将尽力为您协调或提供协助。逾期未确认将视为自动放弃。
 确认链接：%s
 2. 添加小助手微信：为确保信息畅通，请使用微信扫描以下二维码或搜索“15522512264”添加BoHack官方小助手，添加时请将昵称修改为“2026智能创新黑客松-姓名-学校/单位”，后续事项将通过该微信进行通知。
 （小助手二维码）
@@ -525,12 +539,14 @@ func buildAttendanceConfirmationEmail(name, eventTitle, confirmURL, declineURL s
 如有任何问题，欢迎随时回复本邮件或添加小助手微信咨询。
 
 BoHack组委会
-2026年5月8日
+%s
 BOHACK 2026 · 天津 / 2026.05.22-31 · WIE 2026 OFFICIAL TRACK
 `,
 		data.Subject,
 		data.Name,
+		data.DeadlineText,
 		data.ConfirmURL,
+		data.SentDateText,
 	)
 
 	message := emailMessage{
@@ -582,10 +598,13 @@ func buildVisitorEmail(name string) (emailMessage, error) {
 	return addCommonRegistrationAssets(message, false)
 }
 
-func buildMinorAdmissionEmail(name, confirmURL string) (emailMessage, error) {
+func buildMinorAdmissionEmail(name, confirmURL string, sentAt, confirmationDeadline time.Time) (emailMessage, error) {
 	name = fallbackName(name)
 	escapedName := template.HTMLEscapeString(name)
 	escapedConfirmURL := template.HTMLEscapeString(strings.TrimSpace(confirmURL))
+	sentAt, confirmationDeadline = resolveConfirmationEmailTimes(sentAt, confirmationDeadline)
+	deadlineText := formatConfirmationDeadlineText(confirmationDeadline)
+	sentDateText := formatChineseDate(sentAt)
 	subject := "祝贺！您的孩子已正式获得2026智能创新黑客松的参赛席位！"
 	bodyHTML := template.HTML(fmt.Sprintf(`
               <p style="margin:0 0 18px;color:#241f1a;font-size:18px;line-height:1.7;font-weight:800;">%sBoHacker 的家长：</p>
@@ -601,15 +620,15 @@ func buildMinorAdmissionEmail(name, confirmURL string) (emailMessage, error) {
               </table>
               <div style="margin:30px 0 14px;font-size:13px;letter-spacing:0.12em;text-transform:uppercase;color:#7c6f63;font-weight:800;">二、后续步骤与须知</div>
               <table role="presentation" width="100%%" cellspacing="0" cellpadding="0" style="border-collapse:separate;border-spacing:0 12px;">
-                <tr><td style="padding:16px 18px;border-radius:18px;background:#fffaf0;border:1px solid rgba(36,31,26,0.08);"><strong style="color:#241f1a;">1. 确认参赛与签署家长知情同意书：</strong>由于您的孩子为未成年人，参赛需获得监护人的书面同意。请您务必于<strong style="color:#241f1a;">5月11日17点前</strong>点击下方链接确认参赛，认真阅读并上传手写签署后的《2026智能创新黑客松活动风险告知与参与确认书》（见附件），以确认孩子的参赛资格。如因个人安排变动无法如期参与，请回复本邮件告知<strong style="color:#241f1a;">【姓名 + 无法参赛 + 简要原因】</strong>，我们将尽力为您协调或提供协助。逾期未确认将视为自动放弃。<a href="%s" style="display:block;margin-top:16px;padding:16px 22px;border-radius:999px;background:#cff65d;color:#241f1a;text-align:center;text-decoration:none;font-weight:800;">确认参赛并上传确认书 ↗</a></td></tr>
+                <tr><td style="padding:16px 18px;border-radius:18px;background:#fffaf0;border:1px solid rgba(36,31,26,0.08);"><strong style="color:#241f1a;">1. 确认参赛与签署家长知情同意书：</strong>由于您的孩子为未成年人，参赛需获得监护人的书面同意。请您务必于<strong style="color:#241f1a;">%s</strong>点击下方链接确认参赛，认真阅读并上传手写签署后的《2026智能创新黑客松活动风险告知与参与确认书》（见附件），以确认孩子的参赛资格。如因个人安排变动无法如期参与，请回复本邮件告知<strong style="color:#241f1a;">【姓名 + 无法参赛 + 简要原因】</strong>，我们将尽力为您协调或提供协助。逾期未确认将视为自动放弃。<a href="%s" style="display:block;margin-top:16px;padding:16px 22px;border-radius:999px;background:#cff65d;color:#241f1a;text-align:center;text-decoration:none;font-weight:800;">确认参赛并上传确认书 ↗</a></td></tr>
                 <tr><td style="padding:16px 18px;border-radius:18px;background:#fffaf0;border:1px solid rgba(36,31,26,0.08);"><strong style="color:#241f1a;">2. 添加小助手微信：</strong> 为确保信息畅通，请使用微信扫描以下二维码或搜索“15522512264”添加BoHack官方小助手，添加时验证信息备注格式为“2026智能创新黑客松-姓名-学校/单位”，后续事项将通过该微信进行通知。<img src="cid:%s" alt="BoHack 小助手微信二维码" width="180" style="display:block;margin-top:14px;width:180px;max-width:100%%;height:auto;border-radius:22px;border:1px solid rgba(36,31,26,0.12);background:#fffdf6;"></td></tr>
                 <tr><td style="padding:16px 18px;border-radius:18px;background:#fffaf0;border:1px solid rgba(36,31,26,0.08);"><strong style="color:#241f1a;">3. 活动详情：</strong> 关于活动的详细日程、规则、赛题发布等信息，请持续关注小助手微信消息及BoHack官方微信公众号。</td></tr>
               </table>
               <p style="margin:20px 0 0;color:#4b4036;font-size:15px;line-height:1.85;">九河下梢，海河之畔，创新的潮水正奔腾涌动。我们诚邀您，成为这浪潮中最激越的一脉；我们期待您，带着智慧的星火与不羁的创意而来，用42小时将奇思淬炼为真；我们更将与您一同，将璀璨的成果推上世界瞩目的舞台。天津已准备好见证您的光芒，世界亦是。</p>
               <p style="margin:18px 0 0;color:#4b4036;font-size:15px;line-height:1.75;">如有任何问题，欢迎随时回复本邮件或添加小助手微信咨询。</p>
               <p style="margin:18px 0 0;color:#7c6f63;font-size:13px;line-height:1.7;">附件：%s</p>
-              <p style="margin:24px 0 0;color:#241f1a;font-size:15px;line-height:1.7;font-weight:800;">BoHack组委会<br>2026年5月8日</p>
-              <p style="margin:22px 0 0;color:#8b8177;font-size:13px;line-height:1.7;">如果按钮无法打开，请复制链接到浏览器：%s</p>`, escapedName, escapedConfirmURL, helperQRCodeContentID, template.HTMLEscapeString(riskConfirmationFile), escapedConfirmURL))
+              <p style="margin:24px 0 0;color:#241f1a;font-size:15px;line-height:1.7;font-weight:800;">BoHack组委会<br>%s</p>
+              <p style="margin:22px 0 0;color:#8b8177;font-size:13px;line-height:1.7;">如果按钮无法打开，请复制链接到浏览器：%s</p>`, escapedName, deadlineText, escapedConfirmURL, helperQRCodeContentID, template.HTMLEscapeString(riskConfirmationFile), sentDateText, escapedConfirmURL))
 
 	message, err := renderRegistrationCopyEmail(registrationCopyEmailData{
 		Subject:         subject,
@@ -619,7 +638,7 @@ func buildMinorAdmissionEmail(name, confirmURL string) (emailMessage, error) {
 		HeroSubtitle:    "请家长协助完成后续确认流程。",
 		BodyHTML:        bodyHTML,
 		QRCodeContentID: helperQRCodeContentID,
-	}, minorAdmissionText(subject, name, confirmURL))
+	}, minorAdmissionText(subject, name, confirmURL, deadlineText, sentDateText))
 	if err != nil {
 		return emailMessage{}, err
 	}
@@ -697,7 +716,7 @@ BOHACK 2026 · 天津 / 2026.05.22-31 · WIE 2026 OFFICIAL TRACK
 `, subject, name)
 }
 
-func minorAdmissionText(subject, name, confirmURL string) string {
+func minorAdmissionText(subject, name, confirmURL, deadlineText, sentDateText string) string {
 	return fmt.Sprintf(`%s
 
 %sBoHacker 的家长：
@@ -715,7 +734,7 @@ func minorAdmissionText(subject, name, confirmURL string) string {
 - 报到时间：5月22日（周五）16:00
 
 二、后续步骤与须知
-1. 确认参赛与签署家长知情同意书：由于您的孩子为未成年人，参赛需获得监护人的书面同意。请您务必于【5月11日17点前】点击下方链接确认参赛，认真阅读并上传手写签署后的《2026智能创新黑客松活动风险告知与参与确认书》（见附件），以确认孩子的参赛资格。如因个人安排变动无法如期参与，请回复本邮件告知【姓名 + 无法参赛 + 简要原因】，我们将尽力为您协调或提供协助。逾期未确认将视为自动放弃。
+1. 确认参赛与签署家长知情同意书：由于您的孩子为未成年人，参赛需获得监护人的书面同意。请您务必于【%s】点击下方链接确认参赛，认真阅读并上传手写签署后的《2026智能创新黑客松活动风险告知与参与确认书》（见附件），以确认孩子的参赛资格。如因个人安排变动无法如期参与，请回复本邮件告知【姓名 + 无法参赛 + 简要原因】，我们将尽力为您协调或提供协助。逾期未确认将视为自动放弃。
 确认链接：%s
 2. 添加小助手微信：为确保信息畅通，请使用微信扫描邮件中的二维码或搜索“15522512264”添加BoHack官方小助手，添加时验证信息备注格式为“2026智能创新黑客松-姓名-学校/单位”，后续事项将通过该微信进行通知。
 3. 活动详情：关于活动的详细日程、规则、赛题发布等信息，请持续关注小助手微信消息及BoHack官方微信公众号。
@@ -726,9 +745,9 @@ func minorAdmissionText(subject, name, confirmURL string) string {
 附件：%s
 
 BoHack组委会
-2026年5月8日
+%s
 BOHACK 2026 · 天津 / 2026.05.22-31 · WIE 2026 OFFICIAL TRACK
-`, subject, name, strings.TrimSpace(confirmURL), riskConfirmationFile)
+`, subject, name, deadlineText, strings.TrimSpace(confirmURL), riskConfirmationFile, sentDateText)
 }
 
 func agreementReminderText(subject, name string) string {
@@ -762,6 +781,34 @@ func fallbackName(name string) string {
 		return "同学"
 	}
 	return name
+}
+
+func resolveConfirmationEmailTimes(sentAt, confirmationDeadline time.Time) (time.Time, time.Time) {
+	if sentAt.IsZero() {
+		sentAt = time.Now().UTC()
+	}
+	if confirmationDeadline.IsZero() {
+		confirmationDeadline = sentAt.Add(72 * time.Hour)
+	}
+	return sentAt.UTC(), confirmationDeadline.UTC()
+}
+
+func formatConfirmationDeadlineText(value time.Time) string {
+	local := value.In(chinaTimeLocation())
+	return fmt.Sprintf("%d月%d日17点前", int(local.Month()), local.Day())
+}
+
+func formatChineseDate(value time.Time) string {
+	local := value.In(chinaTimeLocation())
+	return fmt.Sprintf("%d年%d月%d日", local.Year(), int(local.Month()), local.Day())
+}
+
+func chinaTimeLocation() *time.Location {
+	location, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		return time.FixedZone("CST", 8*60*60)
+	}
+	return location
 }
 
 func addCommonRegistrationAssets(message emailMessage, includeRiskAttachment bool) (emailMessage, error) {

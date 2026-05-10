@@ -79,11 +79,13 @@ func (h *AttendanceHandler) AdminSend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	expiresAt := time.Now().UTC().Add(h.ttl)
+	sentAt := time.Now().UTC()
+	expiresAt := sentAt.Add(h.ttl)
 	confirmation, err := h.confirmations.Create(r.Context(), repository.CreateAttendanceConfirmationParams{
 		RegistrationID: registration.ID,
 		UserID:         registration.UserID,
 		TokenHash:      tokenHash,
+		SentAt:         sentAt,
 		ExpiresAt:      expiresAt,
 	})
 	if err != nil {
@@ -93,6 +95,7 @@ func (h *AttendanceHandler) AdminSend(w http.ResponseWriter, r *http.Request) {
 
 	confirmURL := h.attendanceURL(token, "confirmed")
 	declineURL := h.attendanceURL(token, "declined")
+	emailDeadlineAt := sentAt.Add(registrationEmailConfirmationDeadlineOffset)
 	if err := h.mailer.SendAttendanceConfirmation(
 		r.Context(),
 		registration.EmailSnapshot,
@@ -100,6 +103,8 @@ func (h *AttendanceHandler) AdminSend(w http.ResponseWriter, r *http.Request) {
 		registration.EventTitle,
 		confirmURL,
 		declineURL,
+		sentAt,
+		emailDeadlineAt,
 	); err != nil {
 		httpx.Error(w, http.StatusInternalServerError, 50082, "failed to send attendance confirmation email")
 		return

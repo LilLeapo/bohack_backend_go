@@ -17,6 +17,7 @@ type CreateAttendanceConfirmationParams struct {
 	RegistrationID int64
 	UserID         int
 	TokenHash      string
+	SentAt         time.Time
 	ExpiresAt      time.Time
 }
 
@@ -26,13 +27,17 @@ func NewAttendanceConfirmationRepository(db *gorm.DB) *AttendanceConfirmationRep
 
 func (r *AttendanceConfirmationRepository) Create(ctx context.Context, params CreateAttendanceConfirmationParams) (*models.AttendanceConfirmation, error) {
 	now := time.Now().UTC()
+	sentAt := params.SentAt
+	if sentAt.IsZero() {
+		sentAt = now
+	}
 	item := models.AttendanceConfirmation{
 		RegistrationID: params.RegistrationID,
 		UserID:         params.UserID,
 		TokenHash:      params.TokenHash,
 		Status:         "pending",
 		ExpiresAt:      params.ExpiresAt,
-		SentAt:         now,
+		SentAt:         sentAt.UTC(),
 		CreatedAt:      now,
 		UpdatedAt:      now,
 	}

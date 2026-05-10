@@ -43,7 +43,7 @@ func (m *stubMailer) SendVerificationCode(_ context.Context, email, code, codeTy
 	return nil
 }
 
-func (m *stubMailer) SendAttendanceConfirmation(_ context.Context, _, _, _, _, _ string) error {
+func (m *stubMailer) SendAttendanceConfirmation(_ context.Context, _, _, _, _, _ string, _, _ time.Time) error {
 	return nil
 }
 

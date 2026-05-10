@@ -3,6 +3,7 @@ package mailer
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestBuildVerificationCodeEmailUsesRegistrationCopy(t *testing.T) {
@@ -18,11 +19,15 @@ func TestBuildVerificationCodeEmailUsesRegistrationCopy(t *testing.T) {
 }
 
 func TestBuildAttendanceConfirmationEmailUsesAdmissionCopy(t *testing.T) {
+	sentAt := time.Date(2026, 5, 10, 8, 0, 0, 0, time.UTC)
+	deadline := sentAt.Add(72 * time.Hour)
 	message, err := buildAttendanceConfirmationEmail(
 		"张三",
 		"BOHACK 2026",
 		"https://bohack.top/attendance-confirm?token=abc&status=confirmed",
 		"https://bohack.top/attendance-confirm?token=abc&status=declined",
+		sentAt,
+		deadline,
 	)
 	if err != nil {
 		t.Fatalf("build attendance email: %v", err)
@@ -31,6 +36,8 @@ func TestBuildAttendanceConfirmationEmailUsesAdmissionCopy(t *testing.T) {
 	assertContains(t, message.subject, "祝贺！您已正式获得2026智能创新黑客松的参赛席位！")
 	assertContains(t, message.text, "张三BoHacker")
 	assertContains(t, message.text, "确认链接：https://bohack.top/attendance-confirm?token=abc&status=confirmed")
+	assertContains(t, message.text, "5月13日17点前")
+	assertContains(t, message.text, "2026年5月10日")
 	assertContains(t, message.text, "2026智能创新黑客松活动风险告知与参与确认书")
 	assertContains(t, message.text, "天开高教科创园")
 	assertContains(t, message.html, "国家会展中心")

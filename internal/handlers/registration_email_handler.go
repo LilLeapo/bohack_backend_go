@@ -121,7 +121,7 @@ func (h *RegistrationEmailHandler) AdminSend(w http.ResponseWriter, r *http.Requ
 		"confirmation": confirmation,
 		"delivery":     h.mailer.Mode(),
 		"emailType":    string(kind),
-		"confirmUrl":   consoleOnlyURL(h.mailer.Mode(), confirmURL),
+		"confirmUrl":   confirmURL,
 	}, "registration email sent")
 }
 

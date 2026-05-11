@@ -33,7 +33,7 @@ func NewRouter(
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Recoverer)
-	r.Use(middleware.Timeout(30 * time.Second))
+	r.Use(middleware.Timeout(5 * time.Minute))
 	r.Use(httpx.CORSMiddleware(allowedOrigins))
 
 	authMiddleware := httpx.AuthMiddleware(tokens, users)

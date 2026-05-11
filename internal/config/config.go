@@ -77,7 +77,7 @@ func Load() (Config, error) {
 	}
 	cfg.AccessTokenTTL = time.Duration(ttlMinutes) * time.Minute
 
-	maxUploadMB, err := strconv.Atoi(envOrDefault("MAX_UPLOAD_MB", "20"))
+	maxUploadMB, err := strconv.Atoi(envOrDefault("MAX_UPLOAD_MB", "200"))
 	if err != nil {
 		return Config{}, fmt.Errorf("invalid MAX_UPLOAD_MB: %w", err)
 	}

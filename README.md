@@ -152,7 +152,7 @@ SQLITE_PATH=./storage/debug.sqlite bash ./run-sqlite-dev.sh
   - `file`
   - `kind`
   - 可选 `event_slug` / `eventSlug`
-  - 支持文档、图片、压缩包，以及成熟项目招募用的 `.mp4` / `.m4v` / `.mov` / `.webm` 演示视频
+  - 支持文档、图片、压缩包、`.key` 演示文稿，以及成熟项目招募用的 `.mp4` / `.m4v` / `.mov` / `.webm` 演示视频
 
 ## 管理员接口约束
 
@@ -187,7 +187,7 @@ SQLITE_PATH=./storage/debug.sqlite bash ./run-sqlite-dev.sh
 - `ATTACHMENT_DIR`:
   默认 `./storage/registration_attachments`
 - `MAX_UPLOAD_MB`:
-  默认 `20`
+  默认 `200`
 - `MAIL_MODE`:
   默认 `console`
 - `SMTP_HOST` / `SMTP_PORT` / `SMTP_USERNAME` / `SMTP_PASSWORD` / `SMTP_FROM`:

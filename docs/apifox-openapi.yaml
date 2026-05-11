@@ -314,7 +314,7 @@ paths:
               $ref: "#/components/schemas/UploadAttachmentRequest"
             encoding:
               file:
-                contentType: application/pdf, video/mp4, video/quicktime, video/webm
+                contentType: application/octet-stream
       responses:
         "200":
           $ref: "#/components/responses/AttachmentResponse"
@@ -1128,7 +1128,7 @@ components:
         file:
           type: string
           format: binary
-          description: Supports documents, images, archives, and recruitment demo videos (.mp4, .m4v, .mov, .webm).
+          description: Supports documents, images, archives, Keynote presentations (.key), and recruitment demo videos (.mp4, .m4v, .mov, .webm). The default server-side size limit is 200MB per file.
         kind:
           type: string
           default: attachment

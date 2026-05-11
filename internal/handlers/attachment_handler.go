@@ -28,6 +28,7 @@ var allowedAttachmentExtensions = map[string]struct{}{
 	".docx": {},
 	".jpeg": {},
 	".jpg":  {},
+	".key":  {},
 	".m4v":  {},
 	".mov":  {},
 	".mp4":  {},
@@ -545,6 +546,11 @@ func isAllowedAttachment(ext, mimeType string) bool {
 		return mimeType == "application/x-rar-compressed" || mimeType == "application/vnd.rar"
 	case ".7z":
 		return mimeType == "application/x-7z-compressed"
+	case ".key":
+		// Keynote presentations are ZIP-based packages when uploaded as a file.
+		return mimeType == "application/zip" ||
+			mimeType == "application/x-zip-compressed" ||
+			mimeType == "application/octet-stream"
 	case ".doc":
 		// Legacy Office documents are OLE compound files.
 		return mimeType == "application/x-ole-storage" ||
@@ -562,6 +568,7 @@ func isAllowedAttachment(ext, mimeType string) bool {
 		// OOXML files are ZIP containers; net/http sniffer reports application/zip.
 		return mimeType == "application/zip" ||
 			mimeType == "application/x-zip-compressed" ||
+			mimeType == "application/octet-stream" ||
 			mimeType == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
 			mimeType == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
 			mimeType == "application/vnd.openxmlformats-officedocument.presentationml.presentation"

@@ -152,6 +152,7 @@ SQLITE_PATH=./storage/debug.sqlite bash ./run-sqlite-dev.sh
   - `file`
   - `kind`
   - 可选 `event_slug` / `eventSlug`
+  - 支持文档、图片、压缩包，以及成熟项目招募用的 `.mp4` / `.m4v` / `.mov` / `.webm` 演示视频
 
 ## 管理员接口约束
 

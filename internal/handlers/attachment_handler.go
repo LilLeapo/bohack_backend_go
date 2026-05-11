@@ -28,12 +28,16 @@ var allowedAttachmentExtensions = map[string]struct{}{
 	".docx": {},
 	".jpeg": {},
 	".jpg":  {},
+	".m4v":  {},
+	".mov":  {},
+	".mp4":  {},
 	".pdf":  {},
 	".png":  {},
 	".ppt":  {},
 	".pptx": {},
 	".rar":  {},
 	".txt":  {},
+	".webm": {},
 	".webp": {},
 	".xls":  {},
 	".xlsx": {},
@@ -521,6 +525,17 @@ func isAllowedAttachment(ext, mimeType string) bool {
 		return mimeType == "image/webp"
 	case ".pdf":
 		return mimeType == "application/pdf"
+	case ".mp4", ".m4v":
+		return mimeType == "video/mp4" ||
+			mimeType == "application/mp4" ||
+			mimeType == "application/octet-stream"
+	case ".mov":
+		return mimeType == "video/quicktime" ||
+			mimeType == "video/mp4" ||
+			mimeType == "application/octet-stream"
+	case ".webm":
+		return mimeType == "video/webm" ||
+			mimeType == "application/octet-stream"
 	case ".txt":
 		return strings.HasPrefix(mimeType, "text/plain")
 	case ".zip":

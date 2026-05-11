@@ -314,7 +314,7 @@ paths:
               $ref: "#/components/schemas/UploadAttachmentRequest"
             encoding:
               file:
-                contentType: application/pdf
+                contentType: application/pdf, video/mp4, video/quicktime, video/webm
       responses:
         "200":
           $ref: "#/components/responses/AttachmentResponse"
@@ -1128,6 +1128,7 @@ components:
         file:
           type: string
           format: binary
+          description: Supports documents, images, archives, and recruitment demo videos (.mp4, .m4v, .mov, .webm).
         kind:
           type: string
           default: attachment

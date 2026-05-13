@@ -55,6 +55,27 @@ func TestBuildAttendanceConfirmationEmailUsesAdmissionCopy(t *testing.T) {
 	assertContains(t, message.parts[1].filename, "2026智能创新黑客松活动风险告知与参与确认书.pdf")
 }
 
+func TestBuildMinorAdmissionEmailUsesDynamicDates(t *testing.T) {
+	sentAt := time.Date(2026, 5, 13, 9, 30, 0, 0, time.UTC)
+	deadline := sentAt.Add(72 * time.Hour)
+	message, err := buildRegistrationEmail(RegistrationEmailParams{
+		Kind:                 RegistrationEmailMinorAdmission,
+		Name:                 "李四",
+		ConfirmURL:           "https://bohack.top/attendance-confirm?token=minor&status=confirmed",
+		SentAt:               sentAt,
+		ConfirmationDeadline: deadline,
+	})
+	if err != nil {
+		t.Fatalf("build minor admission email: %v", err)
+	}
+
+	assertContains(t, message.text, "5月16日17点前")
+	assertContains(t, message.text, "2026年5月13日")
+	assertContains(t, message.html, "5月16日17点前")
+	assertContains(t, message.html, "2026年5月13日")
+	assertContains(t, message.html, "token=minor")
+}
+
 func TestBuildRegistrationEmailSupportsCallableKinds(t *testing.T) {
 	cases := []struct {
 		kind      RegistrationEmailKind

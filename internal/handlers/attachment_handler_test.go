@@ -238,7 +238,7 @@ func TestDogfoodRoadshowRegistrationThenUploadAttachments(t *testing.T) {
 		t.Fatalf("registration status = %d, want %d, body = %s", resp.Code, http.StatusOK, resp.Body.String())
 	}
 
-	registration, err := registrationRepo.GetByUserAndEvent(context.Background(), userID, eventID)
+	registration, err := registrationRepo.GetByUserEventAndType(context.Background(), userID, eventID, "roadshow")
 	if err != nil {
 		t.Fatalf("load created registration: %v", err)
 	}
@@ -283,6 +283,35 @@ func TestDogfoodRoadshowRegistrationThenUploadAttachments(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(attachmentDir, item.StoragePath)); err != nil {
 			t.Fatalf("stored file for %s does not exist: %v", item.Kind, err)
 		}
+	}
+}
+
+func TestRegistrationSupportsParticipantAndRoadshowForSameUser(t *testing.T) {
+	registrationHandler, _, token, registrationRepo, _, userID, eventID, _ := newTestRoadshowFlowHandlers(t)
+
+	participant := map[string]any{
+		"realName": "曾志博",
+		"phone":    "13831879096",
+		"school":   "Example University",
+		"extra": map[string]any{
+			"formType": "participant",
+		},
+	}
+	resp := performRegistrationJSONRequest(t, registrationHandler, token, participant)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("participant registration status = %d, want %d, body = %s", resp.Code, http.StatusOK, resp.Body.String())
+	}
+
+	resp = performRegistrationJSONRequest(t, registrationHandler, token, roadshowRegistrationPayload())
+	if resp.Code != http.StatusOK {
+		t.Fatalf("roadshow registration status = %d, want %d, body = %s", resp.Code, http.StatusOK, resp.Body.String())
+	}
+
+	if _, err := registrationRepo.GetByUserEventAndType(context.Background(), userID, eventID, "participant"); err != nil {
+		t.Fatalf("load participant registration: %v", err)
+	}
+	if _, err := registrationRepo.GetByUserEventAndType(context.Background(), userID, eventID, "roadshow"); err != nil {
+		t.Fatalf("load roadshow registration: %v", err)
 	}
 }
 
@@ -529,12 +558,13 @@ func newTestAttachmentUploadHandlerWithMaxUpload(t *testing.T, maxUploadBytes in
 		t.Fatalf("load event: %v", err)
 	}
 	registration, err := registrationRepo.Create(ctx, repository.CreateRegistrationParams{
-		EventID:       event.ID,
-		UserID:        user.UID,
-		Status:        "submitted",
-		RealName:      "Alice",
-		Phone:         "13800138000",
-		EmailSnapshot: user.Email,
+		EventID:          event.ID,
+		UserID:           user.UID,
+		RegistrationType: "roadshow",
+		Status:           "submitted",
+		RealName:         "Alice",
+		Phone:            "13800138000",
+		EmailSnapshot:    user.Email,
 	})
 	if err != nil {
 		t.Fatalf("create registration: %v", err)

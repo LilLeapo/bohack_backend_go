@@ -79,7 +79,11 @@ func (h *AttachmentHandler) ListMy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	registration, ok := h.loadCurrentUserRegistration(w, r, user.UID, readEventSlugFromQuery(r, h.defaultSlug))
+	registrationType, ok := readRegistrationTypeFromRequest(w, r, "participant")
+	if !ok {
+		return
+	}
+	registration, ok := h.loadCurrentUserRegistration(w, r, user.UID, readEventSlugFromQuery(r, h.defaultSlug), registrationType)
 	if !ok {
 		return
 	}
@@ -148,21 +152,41 @@ func (h *AttachmentHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		eventSlug = h.defaultSlug
 	}
 
-	registration, ok := h.loadCurrentUserRegistration(w, r, user.UID, eventSlug)
-	if !ok {
-		return
-	}
-	if !registrationAllowsAttachmentChanges(registration.Status) {
-		httpx.Error(w, http.StatusConflict, 40914, "attachments can no longer be changed for this registration")
-		return
-	}
-
 	kind := strings.TrimSpace(r.FormValue("kind"))
 	if kind == "" {
 		kind = "attachment"
 	}
 	if tooLong(kind, 50) {
 		httpx.Error(w, http.StatusBadRequest, 42261, "kind must be 50 characters or fewer")
+		return
+	}
+
+	registrationTypeFallback := "participant"
+	if strings.HasPrefix(kind, "roadshow_") {
+		registrationTypeFallback = "roadshow"
+	}
+	registrationType, ok := normalizeRegistrationType(firstNonEmpty(
+		r.FormValue("registration_type"),
+		r.FormValue("registrationType"),
+		r.FormValue("form_type"),
+		r.FormValue("formType"),
+		r.URL.Query().Get("registration_type"),
+		r.URL.Query().Get("registrationType"),
+		r.URL.Query().Get("form_type"),
+		r.URL.Query().Get("formType"),
+		registrationTypeFallback,
+	))
+	if !ok {
+		httpx.Error(w, http.StatusBadRequest, 42224, "registration_type must be participant or roadshow")
+		return
+	}
+
+	registration, ok := h.loadCurrentUserRegistration(w, r, user.UID, eventSlug, registrationType)
+	if !ok {
+		return
+	}
+	if !registrationAllowsAttachmentChanges(registration.Status) {
+		httpx.Error(w, http.StatusConflict, 40914, "attachments can no longer be changed for this registration")
 		return
 	}
 
@@ -386,7 +410,7 @@ func (h *AttachmentHandler) serveAttachment(w http.ResponseWriter, r *http.Reque
 	http.ServeContent(w, r, attachment.FileName, attachment.CreatedAt, file)
 }
 
-func (h *AttachmentHandler) loadCurrentUserRegistration(w http.ResponseWriter, r *http.Request, userID int, eventSlug string) (*models.Registration, bool) {
+func (h *AttachmentHandler) loadCurrentUserRegistration(w http.ResponseWriter, r *http.Request, userID int, eventSlug, registrationType string) (*models.Registration, bool) {
 	event, err := h.events.GetBySlug(r.Context(), strings.TrimSpace(eventSlug))
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -397,7 +421,7 @@ func (h *AttachmentHandler) loadCurrentUserRegistration(w http.ResponseWriter, r
 		return nil, false
 	}
 
-	registration, err := h.registrations.GetByUserAndEvent(r.Context(), userID, event.ID)
+	registration, err := h.registrations.GetByUserEventAndType(r.Context(), userID, event.ID, registrationType)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			httpx.Error(w, http.StatusNotFound, 40404, "registration not found")

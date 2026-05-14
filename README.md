@@ -140,6 +140,7 @@ SQLITE_PATH=./storage/debug.sqlite bash ./run-sqlite-dev.sh
   - `new_password` / `newPassword`
 - 报名接口同时接受以下字段别名：
   - `event_slug` / `eventSlug`
+  - `registration_type` / `registrationType`（默认 `participant`；项目/路演报名使用 `roadshow`，也可由 `extra.formType=roadshow` 自动识别）
   - `real_name` / `realName`
   - `team_name` / `teamName`
   - `role_preference` / `rolePreference`
@@ -152,6 +153,7 @@ SQLITE_PATH=./storage/debug.sqlite bash ./run-sqlite-dev.sh
   - `file`
   - `kind`
   - 可选 `event_slug` / `eventSlug`
+  - 可选 `registration_type` / `registrationType`（`roadshow_*` 附件类型会自动归到项目/路演报名）
   - 支持文档、图片、压缩包、`.key` 演示文稿，以及成熟项目招募用的 `.mp4` / `.m4v` / `.mov` / `.webm` 演示视频
 
 ## 管理员接口约束

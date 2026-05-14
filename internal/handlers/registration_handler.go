@@ -24,21 +24,23 @@ type RegistrationHandler struct {
 }
 
 type registrationPayload struct {
-	EventSlug           string         `json:"event_slug"`
-	EventSlugCamel      string         `json:"eventSlug"`
-	RealName            string         `json:"real_name"`
-	RealNameCamel       string         `json:"realName"`
-	Phone               string         `json:"phone"`
-	School              string         `json:"school"`
-	Company             string         `json:"company"`
-	Bio                 string         `json:"bio"`
-	TeamName            string         `json:"team_name"`
-	TeamNameCamel       string         `json:"teamName"`
-	RolePreference      string         `json:"role_preference"`
-	RolePreferenceCamel string         `json:"rolePreference"`
-	Source              string         `json:"source"`
-	Note                string         `json:"note"`
-	Extra               map[string]any `json:"extra"`
+	EventSlug             string         `json:"event_slug"`
+	EventSlugCamel        string         `json:"eventSlug"`
+	RegistrationType      string         `json:"registration_type"`
+	RegistrationTypeCamel string         `json:"registrationType"`
+	RealName              string         `json:"real_name"`
+	RealNameCamel         string         `json:"realName"`
+	Phone                 string         `json:"phone"`
+	School                string         `json:"school"`
+	Company               string         `json:"company"`
+	Bio                   string         `json:"bio"`
+	TeamName              string         `json:"team_name"`
+	TeamNameCamel         string         `json:"teamName"`
+	RolePreference        string         `json:"role_preference"`
+	RolePreferenceCamel   string         `json:"rolePreference"`
+	Source                string         `json:"source"`
+	Note                  string         `json:"note"`
+	Extra                 map[string]any `json:"extra"`
 }
 
 func NewRegistrationHandler(events *repository.EventRepository, registrations *repository.RegistrationRepository, defaultSlug string) *RegistrationHandler {
@@ -66,7 +68,7 @@ func (h *RegistrationHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	existing, err := h.registrations.GetByUserAndEvent(r.Context(), user.UID, event.ID)
+	existing, err := h.registrations.GetByUserEventAndType(r.Context(), user.UID, event.ID, req.RegistrationType)
 	if err == nil {
 		httpx.Error(w, http.StatusConflict, 40910, "you have already registered for this event")
 		_ = existing
@@ -78,20 +80,21 @@ func (h *RegistrationHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	registration, err := h.registrations.Create(r.Context(), repository.CreateRegistrationParams{
-		EventID:        event.ID,
-		UserID:         user.UID,
-		Status:         "submitted",
-		RealName:       req.RealName,
-		Phone:          req.Phone,
-		EmailSnapshot:  user.Email,
-		School:         stringPtrOrNil(req.School),
-		Company:        stringPtrOrNil(req.Company),
-		Bio:            stringPtrOrNil(req.Bio),
-		TeamName:       stringPtrOrNil(req.TeamName),
-		RolePreference: stringPtrOrNil(req.RolePreference),
-		Source:         stringPtrOrNil(req.Source),
-		Note:           stringPtrOrNil(req.Note),
-		Extra:          req.ExtraJSON,
+		EventID:          event.ID,
+		UserID:           user.UID,
+		RegistrationType: req.RegistrationType,
+		Status:           "submitted",
+		RealName:         req.RealName,
+		Phone:            req.Phone,
+		EmailSnapshot:    user.Email,
+		School:           stringPtrOrNil(req.School),
+		Company:          stringPtrOrNil(req.Company),
+		Bio:              stringPtrOrNil(req.Bio),
+		TeamName:         stringPtrOrNil(req.TeamName),
+		RolePreference:   stringPtrOrNil(req.RolePreference),
+		Source:           stringPtrOrNil(req.Source),
+		Note:             stringPtrOrNil(req.Note),
+		Extra:            req.ExtraJSON,
 	})
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -123,9 +126,38 @@ func (h *RegistrationHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	registration, err := h.registrations.GetByUserAndEvent(r.Context(), user.UID, event.ID)
+	registration, err := h.registrations.GetByUserEventAndType(r.Context(), user.UID, event.ID, req.RegistrationType)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
+			if req.RegistrationType != "participant" {
+				if !eventAllowsRegistration(event.Status, event.RegistrationOpenAt, event.RegistrationCloseAt) {
+					httpx.Error(w, http.StatusForbidden, 40310, "registration is not open for this event")
+					return
+				}
+				createdRegistration, createErr := h.registrations.Create(r.Context(), repository.CreateRegistrationParams{
+					EventID:          event.ID,
+					UserID:           user.UID,
+					RegistrationType: req.RegistrationType,
+					Status:           "submitted",
+					RealName:         req.RealName,
+					Phone:            req.Phone,
+					EmailSnapshot:    user.Email,
+					School:           stringPtrOrNil(req.School),
+					Company:          stringPtrOrNil(req.Company),
+					Bio:              stringPtrOrNil(req.Bio),
+					TeamName:         stringPtrOrNil(req.TeamName),
+					RolePreference:   stringPtrOrNil(req.RolePreference),
+					Source:           stringPtrOrNil(req.Source),
+					Note:             stringPtrOrNil(req.Note),
+					Extra:            req.ExtraJSON,
+				})
+				if createErr != nil {
+					httpx.Error(w, http.StatusInternalServerError, 50013, "failed to create registration")
+					return
+				}
+				httpx.OK(w, createdRegistration, "registration submitted")
+				return
+			}
 			httpx.Error(w, http.StatusNotFound, 40404, "registration not found")
 			return
 		}
@@ -144,19 +176,20 @@ func (h *RegistrationHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	updatedRegistration, err := h.registrations.UpdateSubmission(r.Context(), repository.UpdateRegistrationSubmissionParams{
-		ID:             registration.ID,
-		UserID:         user.UID,
-		RealName:       req.RealName,
-		Phone:          req.Phone,
-		EmailSnapshot:  user.Email,
-		School:         stringPtrOrNil(req.School),
-		Company:        stringPtrOrNil(req.Company),
-		Bio:            stringPtrOrNil(req.Bio),
-		TeamName:       stringPtrOrNil(req.TeamName),
-		RolePreference: stringPtrOrNil(req.RolePreference),
-		Source:         stringPtrOrNil(req.Source),
-		Note:           stringPtrOrNil(req.Note),
-		Extra:          req.ExtraJSON,
+		ID:               registration.ID,
+		UserID:           user.UID,
+		RegistrationType: req.RegistrationType,
+		RealName:         req.RealName,
+		Phone:            req.Phone,
+		EmailSnapshot:    user.Email,
+		School:           stringPtrOrNil(req.School),
+		Company:          stringPtrOrNil(req.Company),
+		Bio:              stringPtrOrNil(req.Bio),
+		TeamName:         stringPtrOrNil(req.TeamName),
+		RolePreference:   stringPtrOrNil(req.RolePreference),
+		Source:           stringPtrOrNil(req.Source),
+		Note:             stringPtrOrNil(req.Note),
+		Extra:            req.ExtraJSON,
 	})
 	if err != nil {
 		httpx.Error(w, http.StatusInternalServerError, 50016, "failed to update registration")
@@ -174,12 +207,16 @@ func (h *RegistrationHandler) Cancel(w http.ResponseWriter, r *http.Request) {
 	}
 
 	eventSlug := readEventSlugFromQuery(r, h.defaultSlug)
+	registrationType, ok := readRegistrationTypeFromRequest(w, r, "participant")
+	if !ok {
+		return
+	}
 	event, ok := h.loadEvent(w, r, eventSlug, 40403, 50014)
 	if !ok {
 		return
 	}
 
-	registration, err := h.registrations.GetByUserAndEvent(r.Context(), user.UID, event.ID)
+	registration, err := h.registrations.GetByUserEventAndType(r.Context(), user.UID, event.ID, registrationType)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			httpx.Error(w, http.StatusNotFound, 40404, "registration not found")
@@ -211,12 +248,16 @@ func (h *RegistrationHandler) Status(w http.ResponseWriter, r *http.Request) {
 	}
 
 	eventSlug := readEventSlugFromQuery(r, h.defaultSlug)
+	registrationType, ok := readRegistrationTypeFromRequest(w, r, "participant")
+	if !ok {
+		return
+	}
 	event, ok := h.loadEvent(w, r, eventSlug, 40403, 50014)
 	if !ok {
 		return
 	}
 
-	registration, err := h.registrations.GetByUserAndEvent(r.Context(), user.UID, event.ID)
+	registration, err := h.registrations.GetByUserEventAndType(r.Context(), user.UID, event.ID, registrationType)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			httpx.Error(w, http.StatusNotFound, 40404, "registration not found")
@@ -237,12 +278,16 @@ func (h *RegistrationHandler) Certificate(w http.ResponseWriter, r *http.Request
 	}
 
 	eventSlug := readEventSlugFromQuery(r, h.defaultSlug)
+	registrationType, ok := readRegistrationTypeFromRequest(w, r, "participant")
+	if !ok {
+		return
+	}
 	event, ok := h.loadEvent(w, r, eventSlug, 40403, 50014)
 	if !ok {
 		return
 	}
 
-	registration, err := h.registrations.GetByUserAndEvent(r.Context(), user.UID, event.ID)
+	registration, err := h.registrations.GetByUserEventAndType(r.Context(), user.UID, event.ID, registrationType)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			httpx.Error(w, http.StatusNotFound, 40404, "registration not found")
@@ -265,17 +310,18 @@ func (h *RegistrationHandler) Certificate(w http.ResponseWriter, r *http.Request
 }
 
 type validatedRegistrationPayload struct {
-	EventSlug      string
-	RealName       string
-	Phone          string
-	School         string
-	Company        string
-	Bio            string
-	TeamName       string
-	RolePreference string
-	Source         string
-	Note           string
-	ExtraJSON      json.RawMessage
+	EventSlug        string
+	RegistrationType string
+	RealName         string
+	Phone            string
+	School           string
+	Company          string
+	Bio              string
+	TeamName         string
+	RolePreference   string
+	Source           string
+	Note             string
+	ExtraJSON        json.RawMessage
 }
 
 func (h *RegistrationHandler) decodeValidatedPayload(w http.ResponseWriter, r *http.Request) (validatedRegistrationPayload, bool) {
@@ -285,25 +331,33 @@ func (h *RegistrationHandler) decodeValidatedPayload(w http.ResponseWriter, r *h
 	}
 
 	req.EventSlug = firstNonEmpty(req.EventSlug, req.EventSlugCamel)
+	req.RegistrationType = firstNonEmpty(req.RegistrationType, req.RegistrationTypeCamel, registrationTypeFromExtra(req.Extra))
 	req.RealName = firstNonEmpty(req.RealName, req.RealNameCamel)
 	req.TeamName = firstNonEmpty(req.TeamName, req.TeamNameCamel)
 	req.RolePreference = firstNonEmpty(req.RolePreference, req.RolePreferenceCamel)
 
 	payload := validatedRegistrationPayload{
-		EventSlug:      strings.TrimSpace(req.EventSlug),
-		RealName:       strings.TrimSpace(req.RealName),
-		Phone:          strings.TrimSpace(req.Phone),
-		School:         strings.TrimSpace(req.School),
-		Company:        strings.TrimSpace(req.Company),
-		Bio:            strings.TrimSpace(req.Bio),
-		TeamName:       strings.TrimSpace(req.TeamName),
-		RolePreference: strings.TrimSpace(req.RolePreference),
-		Source:         strings.TrimSpace(req.Source),
-		Note:           strings.TrimSpace(req.Note),
+		EventSlug:        strings.TrimSpace(req.EventSlug),
+		RegistrationType: strings.TrimSpace(req.RegistrationType),
+		RealName:         strings.TrimSpace(req.RealName),
+		Phone:            strings.TrimSpace(req.Phone),
+		School:           strings.TrimSpace(req.School),
+		Company:          strings.TrimSpace(req.Company),
+		Bio:              strings.TrimSpace(req.Bio),
+		TeamName:         strings.TrimSpace(req.TeamName),
+		RolePreference:   strings.TrimSpace(req.RolePreference),
+		Source:           strings.TrimSpace(req.Source),
+		Note:             strings.TrimSpace(req.Note),
 	}
 	if payload.EventSlug == "" {
 		payload.EventSlug = h.defaultSlug
 	}
+	registrationType, ok := normalizeRegistrationType(payload.RegistrationType)
+	if !ok {
+		httpx.Error(w, http.StatusBadRequest, 42224, "registration_type must be participant or roadshow")
+		return validatedRegistrationPayload{}, false
+	}
+	payload.RegistrationType = registrationType
 
 	switch {
 	case payload.RealName == "":
@@ -432,6 +486,52 @@ func readEventSlugFromQuery(r *http.Request, fallback string) string {
 		eventSlug = fallback
 	}
 	return eventSlug
+}
+
+func readRegistrationTypeFromRequest(w http.ResponseWriter, r *http.Request, fallback string) (string, bool) {
+	raw := firstNonEmpty(
+		r.URL.Query().Get("registration_type"),
+		r.URL.Query().Get("registrationType"),
+		r.URL.Query().Get("form_type"),
+		r.URL.Query().Get("formType"),
+		fallback,
+	)
+	registrationType, ok := normalizeRegistrationType(raw)
+	if !ok {
+		httpx.Error(w, http.StatusBadRequest, 42224, "registration_type must be participant or roadshow")
+		return "", false
+	}
+	return registrationType, true
+}
+
+func registrationTypeFromExtra(extra map[string]any) string {
+	if extra == nil {
+		return ""
+	}
+	if value, ok := extra["registrationType"].(string); ok {
+		return value
+	}
+	if value, ok := extra["registration_type"].(string); ok {
+		return value
+	}
+	if value, ok := extra["formType"].(string); ok {
+		return value
+	}
+	if value, ok := extra["form_type"].(string); ok {
+		return value
+	}
+	return ""
+}
+
+func normalizeRegistrationType(raw string) (string, bool) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "", "participant", "personal", "individual", "hackathon", "contestant":
+		return "participant", true
+	case "roadshow", "project", "mature_project", "mature-project":
+		return "roadshow", true
+	default:
+		return "", false
+	}
 }
 
 func stringPtrOrNil(value string) *string {

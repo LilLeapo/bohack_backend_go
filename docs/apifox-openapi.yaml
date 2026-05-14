@@ -1091,6 +1091,10 @@ components:
         event_slug:
           type: string
           description: Defaults to DEFAULT_EVENT_SLUG when empty.
+        registration_type:
+          type: string
+          enum: [participant, roadshow]
+          description: Defaults to participant. Also accepts camel-case registrationType. If omitted, roadshow is inferred from extra.formType=roadshow.
         real_name:
           type: string
           maxLength: 100
@@ -1135,6 +1139,10 @@ components:
           maxLength: 50
         event_slug:
           type: string
+        registration_type:
+          type: string
+          enum: [participant, roadshow]
+          description: Defaults to participant. Roadshow uploads are also inferred when kind starts with roadshow_.
           example: bohack-2026
       required: [file]
 
@@ -1378,6 +1386,9 @@ components:
           type: string
         userId:
           type: integer
+        registrationType:
+          type: string
+          enum: [participant, roadshow]
         username:
           type: string
           nullable: true

@@ -87,6 +87,8 @@ func applyPostgresPreMigrate(tx *gorm.DB) error {
 		`ALTER TABLE IF EXISTS events DROP CONSTRAINT IF EXISTS events_slug_key`,
 		`ALTER TABLE IF EXISTS verification_codes DROP CONSTRAINT IF EXISTS verification_codes_email_code_type_key`,
 		`ALTER TABLE IF EXISTS event_registrations DROP CONSTRAINT IF EXISTS event_registrations_event_id_user_id_key`,
+		`ALTER TABLE IF EXISTS event_registrations DROP CONSTRAINT IF EXISTS uniq_registration_event_user`,
+		`DROP INDEX IF EXISTS uniq_registration_event_user`,
 	}
 	for _, stmt := range stmts {
 		if err := tx.Exec(stmt).Error; err != nil {
@@ -112,6 +114,17 @@ func applyPostgresPostMigrate(tx *gorm.DB) error {
 			END IF;
 			ALTER TABLE event_registrations ALTER COLUMN extra SET DEFAULT '{}'::jsonb;
 		END $$;`,
+		`ALTER TABLE event_registrations ADD COLUMN IF NOT EXISTS registration_type varchar(50) NOT NULL DEFAULT 'participant'`,
+		`UPDATE event_registrations
+			SET registration_type = 'roadshow'
+			WHERE registration_type = 'participant'
+				AND lower(coalesce(
+					extra ->> 'formType',
+					extra ->> 'form_type',
+					extra ->> 'registrationType',
+					extra ->> 'registration_type'
+				)) IN ('roadshow', 'project', 'mature_project', 'mature-project')`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS uniq_registration_event_user_type ON event_registrations (event_id, user_id, registration_type)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_events_single_current ON events (is_current) WHERE is_current`,
 		`DO $$ BEGIN
 			IF NOT EXISTS (
@@ -205,6 +218,17 @@ func applyPostgresPostMigrate(tx *gorm.DB) error {
 
 func applySQLitePostMigrate(tx *gorm.DB) error {
 	stmts := []string{
+		`DROP INDEX IF EXISTS uniq_registration_event_user`,
+		`UPDATE event_registrations
+			SET registration_type = 'roadshow'
+			WHERE registration_type = 'participant'
+				AND lower(coalesce(
+					json_extract(extra, '$.formType'),
+					json_extract(extra, '$.form_type'),
+					json_extract(extra, '$.registrationType'),
+					json_extract(extra, '$.registration_type')
+				)) IN ('roadshow', 'project', 'mature_project', 'mature-project')`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS uniq_registration_event_user_type ON event_registrations (event_id, user_id, registration_type)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_events_single_current ON events (is_current) WHERE is_current = 1`,
 	}
 	for _, stmt := range stmts {

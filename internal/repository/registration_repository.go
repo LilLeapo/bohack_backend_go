@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"time"
 
 	"bohack_backend_go/internal/models"
@@ -15,36 +16,38 @@ type RegistrationRepository struct {
 }
 
 type CreateRegistrationParams struct {
-	EventID        int64
-	UserID         int
-	Status         string
-	RealName       string
-	Phone          string
-	EmailSnapshot  string
-	School         *string
-	Company        *string
-	Bio            *string
-	TeamName       *string
-	RolePreference *string
-	Source         *string
-	Note           *string
-	Extra          json.RawMessage
+	EventID          int64
+	UserID           int
+	RegistrationType string
+	Status           string
+	RealName         string
+	Phone            string
+	EmailSnapshot    string
+	School           *string
+	Company          *string
+	Bio              *string
+	TeamName         *string
+	RolePreference   *string
+	Source           *string
+	Note             *string
+	Extra            json.RawMessage
 }
 
 type UpdateRegistrationSubmissionParams struct {
-	ID             int64
-	UserID         int
-	RealName       string
-	Phone          string
-	EmailSnapshot  string
-	School         *string
-	Company        *string
-	Bio            *string
-	TeamName       *string
-	RolePreference *string
-	Source         *string
-	Note           *string
-	Extra          json.RawMessage
+	ID               int64
+	UserID           int
+	RegistrationType string
+	RealName         string
+	Phone            string
+	EmailSnapshot    string
+	School           *string
+	Company          *string
+	Bio              *string
+	TeamName         *string
+	RolePreference   *string
+	Source           *string
+	Note             *string
+	Extra            json.RawMessage
 }
 
 type AdminUpdateRegistrationParams struct {
@@ -78,30 +81,31 @@ type ListRegistrationsParams struct {
 }
 
 type registrationRow struct {
-	ID             int64        `gorm:"column:id"`
-	EventID        int64        `gorm:"column:event_id"`
-	EventSlug      string       `gorm:"column:event_slug"`
-	EventTitle     string       `gorm:"column:event_title"`
-	UserID         int          `gorm:"column:user_id"`
-	Username       *string      `gorm:"column:username"`
-	Status         string       `gorm:"column:status"`
-	RealName       string       `gorm:"column:real_name"`
-	Phone          string       `gorm:"column:phone"`
-	EmailSnapshot  string       `gorm:"column:email_snapshot"`
-	School         *string      `gorm:"column:school"`
-	Company        *string      `gorm:"column:company"`
-	Bio            *string      `gorm:"column:bio"`
-	TeamName       *string      `gorm:"column:team_name"`
-	RolePreference *string      `gorm:"column:role_preference"`
-	Source         *string      `gorm:"column:source"`
-	Note           *string      `gorm:"column:note"`
-	Extra          models.JSONB `gorm:"column:extra"`
-	SubmittedAt    time.Time    `gorm:"column:submitted_at"`
-	ReviewedAt     *time.Time   `gorm:"column:reviewed_at"`
-	ReviewedBy     *int         `gorm:"column:reviewed_by"`
-	ReviewNote     *string      `gorm:"column:review_note"`
-	CreatedAt      time.Time    `gorm:"column:created_at"`
-	UpdatedAt      time.Time    `gorm:"column:updated_at"`
+	ID               int64        `gorm:"column:id"`
+	EventID          int64        `gorm:"column:event_id"`
+	EventSlug        string       `gorm:"column:event_slug"`
+	EventTitle       string       `gorm:"column:event_title"`
+	UserID           int          `gorm:"column:user_id"`
+	RegistrationType string       `gorm:"column:registration_type"`
+	Username         *string      `gorm:"column:username"`
+	Status           string       `gorm:"column:status"`
+	RealName         string       `gorm:"column:real_name"`
+	Phone            string       `gorm:"column:phone"`
+	EmailSnapshot    string       `gorm:"column:email_snapshot"`
+	School           *string      `gorm:"column:school"`
+	Company          *string      `gorm:"column:company"`
+	Bio              *string      `gorm:"column:bio"`
+	TeamName         *string      `gorm:"column:team_name"`
+	RolePreference   *string      `gorm:"column:role_preference"`
+	Source           *string      `gorm:"column:source"`
+	Note             *string      `gorm:"column:note"`
+	Extra            models.JSONB `gorm:"column:extra"`
+	SubmittedAt      time.Time    `gorm:"column:submitted_at"`
+	ReviewedAt       *time.Time   `gorm:"column:reviewed_at"`
+	ReviewedBy       *int         `gorm:"column:reviewed_by"`
+	ReviewNote       *string      `gorm:"column:review_note"`
+	CreatedAt        time.Time    `gorm:"column:created_at"`
+	UpdatedAt        time.Time    `gorm:"column:updated_at"`
 }
 
 func NewRegistrationRepository(db *gorm.DB) *RegistrationRepository {
@@ -121,7 +125,11 @@ func (r *RegistrationRepository) GetByID(ctx context.Context, id int64) (*models
 }
 
 func (r *RegistrationRepository) GetByUserAndEvent(ctx context.Context, userID int, eventID int64) (*models.Registration, error) {
-	rows, err := r.queryRows(ctx, "er.user_id = ? AND er.event_id = ?", []any{userID, eventID}, "", 1, 0)
+	return r.GetByUserEventAndType(ctx, userID, eventID, "participant")
+}
+
+func (r *RegistrationRepository) GetByUserEventAndType(ctx context.Context, userID int, eventID int64, registrationType string) (*models.Registration, error) {
+	rows, err := r.queryRows(ctx, "er.user_id = ? AND er.event_id = ? AND er.registration_type = ?", []any{userID, eventID, normalizeRegistrationType(registrationType)}, "", 1, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -135,25 +143,27 @@ func (r *RegistrationRepository) GetByUserAndEvent(ctx context.Context, userID i
 func (r *RegistrationRepository) Create(ctx context.Context, params CreateRegistrationParams) (*models.Registration, error) {
 	now := time.Now().UTC()
 	extra := normalizeExtra(params.Extra)
+	registrationType := normalizeRegistrationType(params.RegistrationType)
 
 	registration := models.Registration{
-		EventID:        params.EventID,
-		UserID:         params.UserID,
-		Status:         params.Status,
-		RealName:       params.RealName,
-		Phone:          params.Phone,
-		EmailSnapshot:  params.EmailSnapshot,
-		School:         params.School,
-		Company:        params.Company,
-		Bio:            params.Bio,
-		TeamName:       params.TeamName,
-		RolePreference: params.RolePreference,
-		Source:         params.Source,
-		Note:           params.Note,
-		Extra:          extra,
-		SubmittedAt:    now,
-		CreatedAt:      now,
-		UpdatedAt:      now,
+		EventID:          params.EventID,
+		UserID:           params.UserID,
+		RegistrationType: registrationType,
+		Status:           params.Status,
+		RealName:         params.RealName,
+		Phone:            params.Phone,
+		EmailSnapshot:    params.EmailSnapshot,
+		School:           params.School,
+		Company:          params.Company,
+		Bio:              params.Bio,
+		TeamName:         params.TeamName,
+		RolePreference:   params.RolePreference,
+		Source:           params.Source,
+		Note:             params.Note,
+		Extra:            extra,
+		SubmittedAt:      now,
+		CreatedAt:        now,
+		UpdatedAt:        now,
 	}
 
 	if err := r.db.WithContext(ctx).Create(&registration).Error; err != nil {
@@ -166,28 +176,30 @@ func (r *RegistrationRepository) Create(ctx context.Context, params CreateRegist
 func (r *RegistrationRepository) UpdateSubmission(ctx context.Context, params UpdateRegistrationSubmissionParams) (*models.Registration, error) {
 	now := time.Now().UTC()
 	extra := normalizeExtra(params.Extra)
+	registrationType := normalizeRegistrationType(params.RegistrationType)
 
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Model(&models.Registration{}).
 			Where("id = ?", params.ID).
 			Updates(map[string]any{
-				"status":          "submitted",
-				"real_name":       params.RealName,
-				"phone":           params.Phone,
-				"email_snapshot":  params.EmailSnapshot,
-				"school":          params.School,
-				"company":         params.Company,
-				"bio":             params.Bio,
-				"team_name":       params.TeamName,
-				"role_preference": params.RolePreference,
-				"source":          params.Source,
-				"note":            params.Note,
-				"extra":           extra,
-				"submitted_at":    now,
-				"reviewed_at":     nil,
-				"reviewed_by":     nil,
-				"review_note":     nil,
-				"updated_at":      now,
+				"status":            "submitted",
+				"registration_type": registrationType,
+				"real_name":         params.RealName,
+				"phone":             params.Phone,
+				"email_snapshot":    params.EmailSnapshot,
+				"school":            params.School,
+				"company":           params.Company,
+				"bio":               params.Bio,
+				"team_name":         params.TeamName,
+				"role_preference":   params.RolePreference,
+				"source":            params.Source,
+				"note":              params.Note,
+				"extra":             extra,
+				"submitted_at":      now,
+				"reviewed_at":       nil,
+				"reviewed_by":       nil,
+				"review_note":       nil,
+				"updated_at":        now,
 			}).Error; err != nil {
 			return err
 		}
@@ -356,6 +368,7 @@ func (r *RegistrationRepository) queryRows(ctx context.Context, where string, ar
 			e.slug AS event_slug,
 			e.title AS event_title,
 			er.user_id,
+			er.registration_type,
 			u.username,
 			er.status,
 			er.real_name,
@@ -405,30 +418,31 @@ func rowToRegistration(row registrationRow) models.Registration {
 		extra = models.JSONB(`{}`)
 	}
 	return models.Registration{
-		ID:             row.ID,
-		EventID:        row.EventID,
-		EventSlug:      row.EventSlug,
-		EventTitle:     row.EventTitle,
-		UserID:         row.UserID,
-		Username:       row.Username,
-		Status:         row.Status,
-		RealName:       row.RealName,
-		Phone:          row.Phone,
-		EmailSnapshot:  row.EmailSnapshot,
-		School:         row.School,
-		Company:        row.Company,
-		Bio:            row.Bio,
-		TeamName:       row.TeamName,
-		RolePreference: row.RolePreference,
-		Source:         row.Source,
-		Note:           row.Note,
-		Extra:          extra,
-		SubmittedAt:    row.SubmittedAt,
-		ReviewedAt:     row.ReviewedAt,
-		ReviewedBy:     row.ReviewedBy,
-		ReviewNote:     row.ReviewNote,
-		CreatedAt:      row.CreatedAt,
-		UpdatedAt:      row.UpdatedAt,
+		ID:               row.ID,
+		EventID:          row.EventID,
+		EventSlug:        row.EventSlug,
+		EventTitle:       row.EventTitle,
+		UserID:           row.UserID,
+		RegistrationType: row.RegistrationType,
+		Username:         row.Username,
+		Status:           row.Status,
+		RealName:         row.RealName,
+		Phone:            row.Phone,
+		EmailSnapshot:    row.EmailSnapshot,
+		School:           row.School,
+		Company:          row.Company,
+		Bio:              row.Bio,
+		TeamName:         row.TeamName,
+		RolePreference:   row.RolePreference,
+		Source:           row.Source,
+		Note:             row.Note,
+		Extra:            extra,
+		SubmittedAt:      row.SubmittedAt,
+		ReviewedAt:       row.ReviewedAt,
+		ReviewedBy:       row.ReviewedBy,
+		ReviewNote:       row.ReviewNote,
+		CreatedAt:        row.CreatedAt,
+		UpdatedAt:        row.UpdatedAt,
 	}
 }
 
@@ -437,6 +451,15 @@ func normalizeExtra(raw json.RawMessage) models.JSONB {
 		return models.JSONB(`{}`)
 	}
 	return models.JSONB(raw)
+}
+
+func normalizeRegistrationType(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "roadshow", "project", "mature_project", "mature-project":
+		return "roadshow"
+	default:
+		return "participant"
+	}
 }
 
 func sqlNoRows() error {

@@ -478,7 +478,7 @@ func buildRegistrationEmail(params RegistrationEmailParams) (emailMessage, error
 			params.ConfirmationDeadline,
 		)
 	case RegistrationEmailVisitor:
-		return buildVisitorEmail(params.Name)
+		return buildVisitorEmail(params.Name, params.SentAt)
 	case RegistrationEmailMinorAdmission:
 		return buildMinorAdmissionEmail(params.Name, params.ConfirmURL, params.SentAt, params.ConfirmationDeadline)
 	case RegistrationEmailAgreementReminder:
@@ -557,45 +557,41 @@ BOHACK 2026 · 天津 / 2026.05.22-31 · WIE 2026 OFFICIAL TRACK
 	return addCommonRegistrationAssets(message, true)
 }
 
-func buildVisitorEmail(name string) (emailMessage, error) {
+func buildVisitorEmail(name string, sentAt time.Time) (emailMessage, error) {
 	name = fallbackName(name)
 	escapedName := template.HTMLEscapeString(name)
-	subject := "感谢您申请BoHack2025，诚挚邀请您以“体验者”身份加入这场创新盛会"
+	if sentAt.IsZero() {
+		sentAt = time.Now().UTC()
+	}
+	sentDateText := formatChineseDate(sentAt)
+	subject := "关于2026智能创新黑客松大赛申请的回复通知"
 	bodyHTML := template.HTML(fmt.Sprintf(`
               <p style="margin:0 0 18px;color:#241f1a;font-size:18px;line-height:1.7;font-weight:800;">%sBoHacker：</p>
-              <p style="margin:0;color:#4b4036;font-size:15px;line-height:1.85;">您好！我们衷心感谢您向BoHack2025天津黑客松投递申请，并真诚地分享您的思考与热情。本次活动我们收到了远超预期的、众多优秀创想者的数百份申请。经过组委会审慎的评估与艰难的抉择，我们不得不遗憾地告知您，您此次未能入选正式参赛者名单。尽管您这次未能成为参赛选手，但您在申请信息中所体现的独特性和创造性，依然让我们深信，您值得被这场创新盛会所欢迎。因此，我们怀着最大的诚意，邀请您以 “体验者” 这一特别身份来到现场，成为BoHack2025不可或缺的一部分。</p>
-              <div style="margin:30px 0 14px;font-size:13px;letter-spacing:0.12em;text-transform:uppercase;color:#7c6f63;font-weight:800;">作为“体验者”，您将享有以下权益</div>
+              <p style="margin:0;color:#4b4036;font-size:15px;line-height:1.85;">您好！非常感谢您对2026智能创新黑客松大赛的关注与申请，也诚挚感谢您在申请过程中所付出的时间与思考。我们非常珍视每一位申请者的热情与创意。</p>
+              <p style="margin:18px 0 0;color:#4b4036;font-size:15px;line-height:1.85;">本次大赛我们收到了远超预期的、众多优秀创想者的数百份申请。经过组委会审慎的评估与艰难的抉择，我们不得不遗憾地告知您，此次您未能进入本次大赛的正式参赛者名单。</p>
+              <p style="margin:18px 0 0;color:#4b4036;font-size:15px;line-height:1.85;">我们深知每一份申请背后都承载着对技术的热爱与对创新的追求，虽然此次无法邀请您以选手身份登场，但我们仍然欢迎您在2026年5月22日至24日大赛线下活动期间，亲临天津天开高教科创园核心区现场，与我们一同沉浸在这场科技盛会的氛围中。届时您可以：</p>
               <table role="presentation" width="100%%" cellspacing="0" cellpadding="0" style="border-collapse:separate;border-spacing:0 12px;">
-                <tr><td style="padding:16px 18px;border-radius:18px;background:#fffaf0;border:1px solid rgba(36,31,26,0.08);"><strong style="color:#241f1a;">深度参与：</strong> 自由参加所有公开议程，包括开幕式与闭幕式、前沿企业Workshop、企业展会、项目demo展、项目路演答辩以及After Party等活动。</td></tr>
-                <tr><td style="padding:16px 18px;border-radius:18px;background:#fffaf0;border:1px solid rgba(36,31,26,0.08);"><strong style="color:#241f1a;">无界链接：</strong> 与顶尖参赛者、企业导师、投资机构嘉宾进行零距离交流，激发灵感，获取宝贵的行业机会。</td></tr>
-                <tr><td style="padding:16px 18px;border-radius:18px;background:#fffaf0;border:1px solid rgba(36,31,26,0.08);"><strong style="color:#241f1a;">科技体验：</strong> 深入学习和体验现场企业的前沿AI产品与技术，接触包括3D打印机、脑机接口、无人机、VR/AR在内的酷炫科技展品。</td></tr>
+                <tr><td style="padding:16px 18px;border-radius:18px;background:#fffaf0;border:1px solid rgba(36,31,26,0.08);"><strong style="color:#241f1a;">自由观摩：</strong> 近距离观看参赛团队的开发过程与项目展示，感受真实赛场中的创新节奏；</td></tr>
+                <tr><td style="padding:16px 18px;border-radius:18px;background:#fffaf0;border:1px solid rgba(36,31,26,0.08);"><strong style="color:#241f1a;">交流学习：</strong> 与来自企业、高校的导师及优秀选手进行面对面沟通，激发灵感、拓展视野；</td></tr>
+                <tr><td style="padding:16px 18px;border-radius:18px;background:#fffaf0;border:1px solid rgba(36,31,26,0.08);"><strong style="color:#241f1a;">体验互动：</strong> 参与现场的前沿企业workshop等公开环节。</td></tr>
               </table>
-              <div style="margin:30px 0 14px;font-size:13px;letter-spacing:0.12em;text-transform:uppercase;color:#7c6f63;font-weight:800;">活动信息</div>
-              <table role="presentation" width="100%%" cellspacing="0" cellpadding="0" style="border-collapse:separate;border-spacing:0 12px;">
-                <tr><td style="padding:16px 18px;border-radius:18px;background:#241f1a;color:#f7f1e5;"><strong style="color:#cff65d;">活动时间</strong><br>2025年12月26日 - 28日（您可选择感兴趣的时间段随时加入）</td></tr>
-                <tr><td style="padding:16px 18px;border-radius:18px;background:#241f1a;color:#f7f1e5;"><strong style="color:#cff65d;">活动地点</strong><br>天开高教科创园核心区</td></tr>
-              </table>
-              <div style="margin-top:18px;padding:18px;border-radius:20px;background:#fffaf0;border:1px solid rgba(36,31,26,0.08);">
-                <div style="margin-bottom:8px;color:#241f1a;font-weight:800;">参与方式</div>
-                如果您希望以“体验者”身份参加，请扫描下方二维码，一起创造！
-                <img src="cid:%s" alt="BoHack 小助手微信二维码" width="180" style="display:block;margin-top:14px;width:180px;max-width:100%%;height:auto;border-radius:22px;border:1px solid rgba(36,31,26,0.12);background:#fffdf6;">
-              </div>
-              <p style="margin:20px 0 0;color:#4b4036;font-size:15px;line-height:1.85;">相遇与链接本身，就是创造的开始。我们始终相信，BoHack2025中每一种角色的参与都不可或缺，“体验者”的身份，能给您带来更自由的观察、更独特的启发。我们真诚希望您能接受这份邀请，参与到这场属于所有创造者的聚会中来。期待与您在天津相遇，一起见证灵感如何生根，创造如何发生。</p>
-              <p style="margin:24px 0 0;color:#241f1a;font-size:15px;line-height:1.7;font-weight:800;">BoHack2025组委会 敬上<br>2026年5月8日</p>`, escapedName, helperQRCodeContentID))
+              <p style="margin:20px 0 0;color:#4b4036;font-size:15px;line-height:1.85;">相遇与链接本身，就是创造的开始。如果您希望在此期间到场交流，可直接前往活动现场，现场志愿者将为您提供指引与服务。再次感谢您的关注与支持，也祝愿您在未来的创新道路上持续突破、精彩继续。期待在不久的将来，能与您在更广阔的科创舞台重逢！</p>
+              <p style="margin:18px 0 0;color:#4b4036;font-size:15px;line-height:1.75;">如有疑问，请使用微信搜索“15522512264”添加BoHack官方小助手进一步咨询。</p>
+              <p style="margin:24px 0 0;color:#241f1a;font-size:15px;line-height:1.7;font-weight:800;">BoHack组委会<br>%s</p>`, escapedName, sentDateText))
 
 	message, err := renderRegistrationCopyEmail(registrationCopyEmailData{
 		Subject:         subject,
-		Preheader:       "诚挚邀请您以“体验者”身份加入这场创新盛会。",
-		Eyebrow:         "Experience Invitation · 体验者邀请",
-		HeroTitle:       "以体验者身份加入。",
-		HeroSubtitle:    "感谢您的申请，也欢迎您来到现场链接、观察与创造。",
+		Preheader:       "感谢您对2026智能创新黑客松大赛的关注与申请。",
+		Eyebrow:         "Application Reply · 申请回复",
+		HeroTitle:       "感谢您的申请。",
+		HeroSubtitle:    "欢迎您来到现场观摩、交流与体验。",
 		BodyHTML:        bodyHTML,
 		QRCodeContentID: helperQRCodeContentID,
-	}, visitorText(subject, name))
+	}, visitorText(subject, name, sentDateText))
 	if err != nil {
 		return emailMessage{}, err
 	}
-	return addCommonRegistrationAssets(message, false)
+	return message, nil
 }
 
 func buildMinorAdmissionEmail(name, confirmURL string, sentAt, confirmationDeadline time.Time) (emailMessage, error) {
@@ -691,29 +687,29 @@ func renderRegistrationCopyEmail(data registrationCopyEmailData, text string) (e
 	}, nil
 }
 
-func visitorText(subject, name string) string {
+func visitorText(subject, name, sentDateText string) string {
 	return fmt.Sprintf(`%s
 
 %sBoHacker：
 
-您好！我们衷心感谢您向BoHack2025天津黑客松投递申请，并真诚地分享您的思考与热情。本次活动我们收到了远超预期的、众多优秀创想者的数百份申请。经过组委会审慎的评估与艰难的抉择，我们不得不遗憾地告知您，您此次未能入选正式参赛者名单。尽管您这次未能成为参赛选手，但您在申请信息中所体现的独特性和创造性，依然让我们深信，您值得被这场创新盛会所欢迎。因此，我们怀着最大的诚意，邀请您以 “体验者” 这一特别身份来到现场，成为BoHack2025不可或缺的一部分。
+您好！非常感谢您对2026智能创新黑客松大赛的关注与申请，也诚挚感谢您在申请过程中所付出的时间与思考。我们非常珍视每一位申请者的热情与创意。
 
-作为“体验者”，您将享有以下权益：
-- 深度参与：自由参加所有公开议程，包括开幕式与闭幕式、前沿企业Workshop、企业展会、项目demo展、项目路演答辩以及After Party等活动。
-- 无界链接：与顶尖参赛者、企业导师、投资机构嘉宾进行零距离交流，激发灵感，获取宝贵的行业机会。
-- 科技体验：深入学习和体验现场企业的前沿AI产品与技术，接触包括3D打印机、脑机接口、无人机、VR/AR在内的酷炫科技展品。
+本次大赛我们收到了远超预期的、众多优秀创想者的数百份申请。经过组委会审慎的评估与艰难的抉择，我们不得不遗憾地告知您，此次您未能进入本次大赛的正式参赛者名单。
 
-活动信息：
-- 活动时间：2025年12月26日 - 28日（您可选择感兴趣的时间段随时加入）
-- 活动地点：天开高教科创园核心区
-- 参与方式：如果您希望以“体验者”身份参加，请扫描邮件中的二维码，一起创造！
+我们深知每一份申请背后都承载着对技术的热爱与对创新的追求，虽然此次无法邀请您以选手身份登场，但我们仍然欢迎您在2026年5月22日至24日大赛线下活动期间，亲临天津天开高教科创园核心区现场，与我们一同沉浸在这场科技盛会的氛围中。届时您可以：
 
-相遇与链接本身，就是创造的开始。我们始终相信，BoHack2025中每一种角色的参与都不可或缺，“体验者”的身份，能给您带来更自由的观察、更独特的启发。我们真诚希望您能接受这份邀请，参与到这场属于所有创造者的聚会中来。期待与您在天津相遇，一起见证灵感如何生根，创造如何发生。
+- 自由观摩：近距离观看参赛团队的开发过程与项目展示，感受真实赛场中的创新节奏；
+- 交流学习：与来自企业、高校的导师及优秀选手进行面对面沟通，激发灵感、拓展视野；
+- 体验互动：参与现场的前沿企业workshop等公开环节。
 
-BoHack2025组委会 敬上
-2026年5月8日
+相遇与链接本身，就是创造的开始。如果您希望在此期间到场交流，可直接前往活动现场，现场志愿者将为您提供指引与服务。再次感谢您的关注与支持，也祝愿您在未来的创新道路上持续突破、精彩继续。期待在不久的将来，能与您在更广阔的科创舞台重逢！
+
+如有疑问，请使用微信搜索“15522512264”添加BoHack官方小助手进一步咨询。
+
+BoHack组委会
+%s
 BOHACK 2026 · 天津 / 2026.05.22-31 · WIE 2026 OFFICIAL TRACK
-`, subject, name)
+`, subject, name, sentDateText)
 }
 
 func minorAdmissionText(subject, name, confirmURL, deadlineText, sentDateText string) string {

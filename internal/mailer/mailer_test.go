@@ -76,13 +76,35 @@ func TestBuildMinorAdmissionEmailUsesDynamicDates(t *testing.T) {
 	assertContains(t, message.html, "token=minor")
 }
 
+func TestBuildVisitorEmailUsesReplyCopyAndDynamicDate(t *testing.T) {
+	sentAt := time.Date(2026, 5, 18, 9, 30, 0, 0, time.UTC)
+	message, err := buildRegistrationEmail(RegistrationEmailParams{
+		Kind:   RegistrationEmailVisitor,
+		Name:   "李四",
+		SentAt: sentAt,
+	})
+	if err != nil {
+		t.Fatalf("build visitor email: %v", err)
+	}
+
+	assertContains(t, message.subject, "关于2026智能创新黑客松大赛申请的回复通知")
+	assertContains(t, message.text, "李四BoHacker")
+	assertContains(t, message.text, "未能进入本次大赛的正式参赛者名单")
+	assertContains(t, message.text, "2026年5月18日")
+	assertContains(t, message.html, "自由观摩")
+	assertContains(t, message.html, "15522512264")
+	if len(message.parts) != 0 {
+		t.Fatalf("parts len = %d, want 0", len(message.parts))
+	}
+}
+
 func TestBuildRegistrationEmailSupportsCallableKinds(t *testing.T) {
 	cases := []struct {
 		kind      RegistrationEmailKind
 		want      string
 		wantParts int
 	}{
-		{RegistrationEmailVisitor, "体验者", 1},
+		{RegistrationEmailVisitor, "申请回复", 0},
 		{RegistrationEmailMinorAdmission, "家长", 2},
 		{RegistrationEmailAgreementReminder, "赛前确认", 2},
 	}
@@ -93,7 +115,9 @@ func TestBuildRegistrationEmailSupportsCallableKinds(t *testing.T) {
 			t.Fatalf("build registration email kind=%s: %v", tc.kind, err)
 		}
 		assertContains(t, message.html, tc.want)
-		assertContains(t, message.html, "cid:bohack-helper-qr")
+		if tc.kind != RegistrationEmailVisitor {
+			assertContains(t, message.html, "cid:bohack-helper-qr")
+		}
 		if len(message.parts) != tc.wantParts {
 			t.Fatalf("kind=%s parts len = %d, want %d", tc.kind, len(message.parts), tc.wantParts)
 		}

@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -18,6 +19,8 @@ import (
 	"bohack_backend_go/internal/httpx"
 	"bohack_backend_go/internal/models"
 	"bohack_backend_go/internal/repository"
+
+	"github.com/go-chi/chi/v5"
 )
 
 func TestIsAllowedAttachmentSupportsRecruitmentVideoTypes(t *testing.T) {
@@ -217,6 +220,82 @@ func TestUploadDogfoodLargeRecruitmentVideo(t *testing.T) {
 	}
 	if stat.Size() != int64(len(body)) {
 		t.Fatalf("stored file size = %d, want %d", stat.Size(), len(body))
+	}
+}
+
+// TestSignedDownloadStreamsPitchVideoWithoutAuthHeader reproduces the
+// "failed to fetch pitch video" scenario where a browser <video src="...">
+// cannot attach an Authorization header. The signed download URL embedded in
+// the upload response must let an unauthenticated request stream the bytes.
+func TestSignedDownloadStreamsPitchVideoWithoutAuthHeader(t *testing.T) {
+	signer := httpx.NewAttachmentSigner("download-secret", time.Hour)
+	uploadHandler, downloadRouter, token, _, _ := newTestAttachmentDownloadFlowHandlers(t, signer)
+
+	videoBody := []byte("\x00\x00\x00\x18ftypmp42\x00\x00\x00\x00mp42isompitch-demo")
+	resp := performAttachmentUploadRequest(t, uploadHandler, token, "roadshow_pitch_video", "pitch.mp4", videoBody)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("upload status = %d, body = %s", resp.Code, resp.Body.String())
+	}
+
+	var uploadResp struct {
+		Data struct {
+			ID                int64  `json:"id"`
+			DownloadURL       string `json:"downloadUrl"`
+			DownloadExpiresIn int    `json:"downloadExpiresIn"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(resp.Body.Bytes(), &uploadResp); err != nil {
+		t.Fatalf("unmarshal upload response: %v body=%s", err, resp.Body.String())
+	}
+	if uploadResp.Data.DownloadURL == "" {
+		t.Fatalf("upload response missing downloadUrl: %s", resp.Body.String())
+	}
+	if uploadResp.Data.DownloadExpiresIn <= 0 {
+		t.Fatalf("upload response missing downloadExpiresIn: %s", resp.Body.String())
+	}
+	if !strings.HasPrefix(uploadResp.Data.DownloadURL, "/attachments/") {
+		t.Fatalf("downloadUrl should point at public signed endpoint, got %q", uploadResp.Data.DownloadURL)
+	}
+	if !strings.Contains(uploadResp.Data.DownloadURL, "sig=") {
+		t.Fatalf("downloadUrl missing signature: %q", uploadResp.Data.DownloadURL)
+	}
+
+	// Browser-style request: no Authorization header.
+	req := httptest.NewRequest(http.MethodGet, uploadResp.Data.DownloadURL, nil)
+	downloadResp := httptest.NewRecorder()
+	downloadRouter.ServeHTTP(downloadResp, req)
+	if downloadResp.Code != http.StatusOK {
+		t.Fatalf("signed download status = %d, body = %s", downloadResp.Code, downloadResp.Body.String())
+	}
+	if !bytes.Equal(downloadResp.Body.Bytes(), videoBody) {
+		t.Fatalf("signed download body mismatch: got %d bytes, want %d", downloadResp.Body.Len(), len(videoBody))
+	}
+}
+
+func TestSignedDownloadRejectsTamperedSignature(t *testing.T) {
+	signer := httpx.NewAttachmentSigner("download-secret", time.Hour)
+	uploadHandler, downloadRouter, token, _, _ := newTestAttachmentDownloadFlowHandlers(t, signer)
+
+	resp := performAttachmentUploadRequest(t, uploadHandler, token, "roadshow_pitch_video", "pitch.mp4",
+		[]byte("\x00\x00\x00\x18ftypmp42\x00\x00\x00\x00mp42isompitch"))
+	if resp.Code != http.StatusOK {
+		t.Fatalf("upload status = %d, body = %s", resp.Code, resp.Body.String())
+	}
+	var uploadResp struct {
+		Data struct {
+			DownloadURL string `json:"downloadUrl"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(resp.Body.Bytes(), &uploadResp); err != nil {
+		t.Fatalf("unmarshal upload response: %v", err)
+	}
+
+	tampered := strings.Replace(uploadResp.Data.DownloadURL, "sig=", "sig=AAAA", 1)
+	req := httptest.NewRequest(http.MethodGet, tampered, nil)
+	downloadResp := httptest.NewRecorder()
+	downloadRouter.ServeHTTP(downloadResp, req)
+	if downloadResp.Code != http.StatusUnauthorized {
+		t.Fatalf("tampered signature should yield 401, got %d body=%s", downloadResp.Code, downloadResp.Body.String())
 	}
 }
 
@@ -491,6 +570,7 @@ func newTestRoadshowFlowHandlers(t *testing.T) (
 		cfg.DefaultEventSlug,
 		attachmentDir,
 		200*1024*1024,
+		httpx.NewAttachmentSigner("test-secret", time.Hour),
 	)
 
 	tokenManager := auth.NewTokenManager("test-secret", time.Hour)
@@ -508,6 +588,100 @@ func newTestRoadshowFlowHandlers(t *testing.T) (
 		user.UID,
 		event.ID,
 		attachmentDir
+}
+
+// newTestAttachmentDownloadFlowHandlers wires the upload handler together
+// with a chi router exposing the public signed download endpoint, so a test
+// can upload a file and then fetch it back via the URL embedded in the upload
+// response (mirroring the production browser flow).
+func newTestAttachmentDownloadFlowHandlers(t *testing.T, signer *httpx.AttachmentSigner) (
+	http.Handler,
+	http.Handler,
+	string,
+	*repository.AttachmentRepository,
+	string,
+) {
+	t.Helper()
+
+	cfg := config.Config{
+		DBDriver:          "sqlite",
+		DatabaseURL:       filepath.Join(t.TempDir(), "test.db"),
+		DefaultEventSlug:  "test-event",
+		DefaultEventTitle: "Test Event",
+	}
+
+	ctx := context.Background()
+	gormDB, err := db.Open(ctx, cfg)
+	if err != nil {
+		t.Fatalf("open test database: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := db.Close(gormDB); err != nil {
+			t.Fatalf("close test database: %v", err)
+		}
+	})
+
+	if err := db.EnsureSchema(ctx, gormDB, cfg); err != nil {
+		t.Fatalf("ensure schema: %v", err)
+	}
+
+	userRepo := repository.NewUserRepository(gormDB)
+	eventRepo := repository.NewEventRepository(gormDB)
+	registrationRepo := repository.NewRegistrationRepository(gormDB)
+	attachmentRepo := repository.NewAttachmentRepository(gormDB)
+
+	now := time.Now().UTC()
+	user := models.User{
+		Username:     "download-user",
+		Email:        "download-user@example.com",
+		PasswordHash: "hash",
+		Role:         "visitor",
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+	if err := userRepo.Create(ctx, &user); err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	event, err := eventRepo.GetBySlug(ctx, cfg.DefaultEventSlug)
+	if err != nil {
+		t.Fatalf("load event: %v", err)
+	}
+	if _, err := registrationRepo.Create(ctx, repository.CreateRegistrationParams{
+		EventID:          event.ID,
+		UserID:           user.UID,
+		RegistrationType: "roadshow",
+		Status:           "submitted",
+		RealName:         "Alice",
+		Phone:            "13800138000",
+		EmailSnapshot:    user.Email,
+	}); err != nil {
+		t.Fatalf("create registration: %v", err)
+	}
+
+	attachmentDir := t.TempDir()
+	attachmentHandler := NewAttachmentHandler(
+		eventRepo,
+		registrationRepo,
+		attachmentRepo,
+		cfg.DefaultEventSlug,
+		attachmentDir,
+		200*1024*1024,
+		signer,
+	)
+
+	tokenManager := auth.NewTokenManager("test-secret", time.Hour)
+	token, _, err := tokenManager.CreateAccessToken(user.UID)
+	if err != nil {
+		t.Fatalf("create access token: %v", err)
+	}
+
+	uploadHandler := httpx.AuthMiddleware(tokenManager, userRepo)(http.HandlerFunc(attachmentHandler.Upload))
+
+	downloadRouter := chi.NewRouter()
+	downloadRouter.Get("/attachments/{attachmentID}/download", attachmentHandler.DownloadSigned)
+
+	return uploadHandler, downloadRouter, token, attachmentRepo, attachmentDir
 }
 
 func newTestAttachmentUploadHandlerWithMaxUpload(t *testing.T, maxUploadBytes int64) (http.Handler, string, *repository.AttachmentRepository, int64, string) {
@@ -578,6 +752,7 @@ func newTestAttachmentUploadHandlerWithMaxUpload(t *testing.T, maxUploadBytes in
 		cfg.DefaultEventSlug,
 		attachmentDir,
 		maxUploadBytes,
+		httpx.NewAttachmentSigner("test-secret", time.Hour),
 	)
 
 	tokenManager := auth.NewTokenManager("test-secret", time.Hour)

@@ -54,6 +54,11 @@ func NewRouter(
 			r.With(authMiddleware).Post("/change-password", authHandler.ChangePassword)
 		})
 
+		// Signed attachment download. No JWT — capability is encoded in the
+		// query (?exp=...&sig=...) so browsers can stream via <video src=...>,
+		// which cannot attach Authorization headers.
+		router.Get("/attachments/{attachmentID}/download", attachmentHandler.DownloadSigned)
+
 		router.Get("/events", eventHandler.ListPublic)
 		router.Get("/events/current", eventHandler.GetCurrent)
 		router.Get("/events/{slug}", eventHandler.GetPublicBySlug)
@@ -73,6 +78,7 @@ func NewRouter(
 		router.With(authMiddleware).Post("/registration/attachments", attachmentHandler.Upload)
 		router.With(authMiddleware).Delete("/registration/attachments/{attachmentID}", attachmentHandler.Delete)
 		router.With(authMiddleware).Get("/registration/attachments/{attachmentID}/download", attachmentHandler.Download)
+		router.With(authMiddleware).Get("/registration/attachments/{attachmentID}/signed-url", attachmentHandler.SignedURL)
 		router.With(authMiddleware).Post("/registrations", registrationHandler.Create)
 		router.With(authMiddleware).Put("/registrations", registrationHandler.Update)
 		router.With(authMiddleware).Patch("/registrations", registrationHandler.Update)
@@ -83,6 +89,7 @@ func NewRouter(
 		router.With(authMiddleware).Post("/registrations/me/attachments", attachmentHandler.Upload)
 		router.With(authMiddleware).Delete("/registrations/me/attachments/{attachmentID}", attachmentHandler.Delete)
 		router.With(authMiddleware).Get("/registrations/me/attachments/{attachmentID}/download", attachmentHandler.Download)
+		router.With(authMiddleware).Get("/registrations/me/attachments/{attachmentID}/signed-url", attachmentHandler.SignedURL)
 
 		router.Route("/admin", func(r chi.Router) {
 			r.Use(authMiddleware)

@@ -248,7 +248,7 @@ func (h *RegistrationHandler) Status(w http.ResponseWriter, r *http.Request) {
 	}
 
 	eventSlug := readEventSlugFromQuery(r, h.defaultSlug)
-	registrationType, ok := readRegistrationTypeFromRequest(w, r, "participant")
+	registrationType, hasType, ok := readOptionalRegistrationTypeFromRequest(w, r)
 	if !ok {
 		return
 	}
@@ -257,7 +257,15 @@ func (h *RegistrationHandler) Status(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	registration, err := h.registrations.GetByUserEventAndType(r.Context(), user.UID, event.ID, registrationType)
+	var (
+		registration *models.Registration
+		err          error
+	)
+	if hasType {
+		registration, err = h.registrations.GetByUserEventAndType(r.Context(), user.UID, event.ID, registrationType)
+	} else {
+		registration, err = h.registrations.GetLatestByUserAndEvent(r.Context(), user.UID, event.ID)
+	}
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			httpx.Error(w, http.StatusNotFound, 40404, "registration not found")
@@ -502,6 +510,24 @@ func readRegistrationTypeFromRequest(w http.ResponseWriter, r *http.Request, fal
 		return "", false
 	}
 	return registrationType, true
+}
+
+func readOptionalRegistrationTypeFromRequest(w http.ResponseWriter, r *http.Request) (registrationType string, present bool, ok bool) {
+	raw := strings.TrimSpace(firstNonEmpty(
+		r.URL.Query().Get("registration_type"),
+		r.URL.Query().Get("registrationType"),
+		r.URL.Query().Get("form_type"),
+		r.URL.Query().Get("formType"),
+	))
+	if raw == "" {
+		return "", false, true
+	}
+	normalized, valid := normalizeRegistrationType(raw)
+	if !valid {
+		httpx.Error(w, http.StatusBadRequest, 42224, "registration_type must be participant or roadshow")
+		return "", false, false
+	}
+	return normalized, true, true
 }
 
 func registrationTypeFromExtra(extra map[string]any) string {

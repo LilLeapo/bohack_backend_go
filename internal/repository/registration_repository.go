@@ -140,6 +140,18 @@ func (r *RegistrationRepository) GetByUserEventAndType(ctx context.Context, user
 	return &item, nil
 }
 
+func (r *RegistrationRepository) GetLatestByUserAndEvent(ctx context.Context, userID int, eventID int64) (*models.Registration, error) {
+	rows, err := r.queryRows(ctx, "er.user_id = ? AND er.event_id = ?", []any{userID, eventID}, "er.submitted_at DESC, er.id DESC", 1, 0)
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return nil, sqlNoRows()
+	}
+	item := rowToRegistration(rows[0])
+	return &item, nil
+}
+
 func (r *RegistrationRepository) Create(ctx context.Context, params CreateRegistrationParams) (*models.Registration, error) {
 	now := time.Now().UTC()
 	extra := normalizeExtra(params.Extra)

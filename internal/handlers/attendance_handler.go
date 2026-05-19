@@ -28,6 +28,7 @@ type AttendanceHandler struct {
 	ttl             time.Duration
 	attachmentDir   string
 	maxUploadBytes  int64
+	signer          *httpx.AttachmentSigner
 }
 
 type attendanceConfirmRequest struct {
@@ -44,6 +45,7 @@ func NewAttendanceHandler(
 	ttl time.Duration,
 	attachmentDir string,
 	maxUploadBytes int64,
+	signer *httpx.AttachmentSigner,
 ) *AttendanceHandler {
 	return &AttendanceHandler{
 		registrations:   registrations,
@@ -54,6 +56,7 @@ func NewAttendanceHandler(
 		ttl:             ttl,
 		attachmentDir:   attachmentDir,
 		maxUploadBytes:  maxUploadBytes,
+		signer:          signer,
 	}
 }
 
@@ -258,7 +261,7 @@ func (h *AttendanceHandler) ConfirmUpload(w http.ResponseWriter, r *http.Request
 
 	httpx.OK(w, map[string]any{
 		"attendance":   updated,
-		"attachment":   presentAttachment(attachment),
+		"attachment":   presentAttachment(h.signer, attachment),
 		"registration": registration,
 	}, "attendance confirmed")
 }

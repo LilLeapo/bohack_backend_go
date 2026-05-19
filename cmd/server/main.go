@@ -14,6 +14,7 @@ import (
 	"bohack_backend_go/internal/config"
 	"bohack_backend_go/internal/db"
 	"bohack_backend_go/internal/handlers"
+	"bohack_backend_go/internal/httpx"
 	"bohack_backend_go/internal/mailer"
 	"bohack_backend_go/internal/repository"
 	"bohack_backend_go/internal/server"
@@ -57,6 +58,7 @@ func main() {
 	verificationCodeRepo := repository.NewVerificationCodeRepository(gormDB)
 
 	tokenManager := auth.NewTokenManager(cfg.JWTSecret, cfg.AccessTokenTTL)
+	attachmentSigner := httpx.NewAttachmentSigner(cfg.JWTSecret, cfg.AttachmentDownloadTTL)
 	var authMailer mailer.Mailer
 	switch cfg.MailMode {
 	case "smtp":
@@ -88,6 +90,7 @@ func main() {
 		cfg.AttendanceConfirmationTTL,
 		cfg.AttachmentDir,
 		cfg.MaxUploadBytes,
+		attachmentSigner,
 	)
 	registrationEmailHandler := handlers.NewRegistrationEmailHandler(
 		registrationRepo,
@@ -103,6 +106,7 @@ func main() {
 		cfg.DefaultEventSlug,
 		cfg.AttachmentDir,
 		cfg.MaxUploadBytes,
+		attachmentSigner,
 	)
 	adminRegistrationHandler := handlers.NewAdminRegistrationHandler(eventRepo, registrationRepo, attendanceConfirmationRepo)
 

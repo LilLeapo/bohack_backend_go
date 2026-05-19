@@ -12,6 +12,7 @@ import (
 
 	"bohack_backend_go/internal/config"
 	"bohack_backend_go/internal/db"
+	"bohack_backend_go/internal/httpx"
 	"bohack_backend_go/internal/models"
 	"bohack_backend_go/internal/repository"
 )
@@ -157,6 +158,7 @@ func newTestAttendanceHandler(t *testing.T) (*AttendanceHandler, *repository.Att
 		time.Hour,
 		t.TempDir(),
 		1024*1024,
+		httpx.NewAttachmentSigner("test-secret", time.Hour),
 	)
 
 	return handler, confirmationRepo, attachmentRepo, token, registration.ID

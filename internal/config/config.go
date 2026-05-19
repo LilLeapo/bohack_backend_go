@@ -23,6 +23,7 @@ type Config struct {
 	AllowedOrigins              []string
 	AttachmentDir               string
 	MaxUploadBytes              int64
+	AttachmentDownloadTTL       time.Duration
 	MailMode                    string
 	SMTPHost                    string
 	SMTPPort                    int
@@ -85,6 +86,15 @@ func Load() (Config, error) {
 		return Config{}, errors.New("MAX_UPLOAD_MB must be greater than 0")
 	}
 	cfg.MaxUploadBytes = int64(maxUploadMB) * 1024 * 1024
+
+	downloadTTLMinutes, err := strconv.Atoi(envOrDefault("ATTACHMENT_DOWNLOAD_TTL_MINUTES", "120"))
+	if err != nil {
+		return Config{}, fmt.Errorf("invalid ATTACHMENT_DOWNLOAD_TTL_MINUTES: %w", err)
+	}
+	if downloadTTLMinutes <= 0 {
+		return Config{}, errors.New("ATTACHMENT_DOWNLOAD_TTL_MINUTES must be greater than 0")
+	}
+	cfg.AttachmentDownloadTTL = time.Duration(downloadTTLMinutes) * time.Minute
 
 	smtpPort, err := strconv.Atoi(envOrDefault("SMTP_PORT", "587"))
 	if err != nil {

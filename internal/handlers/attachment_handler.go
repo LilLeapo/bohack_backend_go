@@ -52,6 +52,7 @@ type AttachmentHandler struct {
 	defaultSlug    string
 	attachmentDir  string
 	maxUploadBytes int64
+	signer         *httpx.AttachmentSigner
 }
 
 func NewAttachmentHandler(
@@ -61,6 +62,7 @@ func NewAttachmentHandler(
 	defaultSlug string,
 	attachmentDir string,
 	maxUploadBytes int64,
+	signer *httpx.AttachmentSigner,
 ) *AttachmentHandler {
 	return &AttachmentHandler{
 		events:         events,
@@ -69,6 +71,7 @@ func NewAttachmentHandler(
 		defaultSlug:    defaultSlug,
 		attachmentDir:  attachmentDir,
 		maxUploadBytes: maxUploadBytes,
+		signer:         signer,
 	}
 }
 
@@ -94,7 +97,7 @@ func (h *AttachmentHandler) ListMy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	httpx.OK(w, presentAttachments(attachments), "OK")
+	httpx.OK(w, h.presentAttachments(attachments), "OK")
 }
 
 func (h *AttachmentHandler) AdminListForRegistration(w http.ResponseWriter, r *http.Request) {
@@ -118,7 +121,7 @@ func (h *AttachmentHandler) AdminListForRegistration(w http.ResponseWriter, r *h
 		return
 	}
 
-	httpx.OK(w, presentAttachments(attachments), "OK")
+	httpx.OK(w, h.presentAttachments(attachments), "OK")
 }
 
 func (h *AttachmentHandler) Upload(w http.ResponseWriter, r *http.Request) {
@@ -266,7 +269,7 @@ func (h *AttachmentHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	httpx.OK(w, presentAttachment(attachment), "attachment uploaded")
+	httpx.OK(w, h.presentAttachment(attachment), "attachment uploaded")
 }
 
 func (h *AttachmentHandler) Delete(w http.ResponseWriter, r *http.Request) {
@@ -322,6 +325,72 @@ func (h *AttachmentHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httpx.OK(w, map[string]any{"id": attachment.ID}, "attachment deleted")
+}
+
+// DownloadSigned streams an attachment authenticated via a short-lived signed
+// query (?exp=...&sig=...). It carries no JWT requirement so that browsers can
+// load videos directly via <video src="..."> — which cannot attach custom
+// Authorization headers. The capability check happened upstream when the
+// signed URL was issued (e.g. in ListMy / SignedURL).
+func (h *AttachmentHandler) DownloadSigned(w http.ResponseWriter, r *http.Request) {
+	attachmentID, ok := readAttachmentID(w, r)
+	if !ok {
+		return
+	}
+	if h.signer == nil {
+		httpx.Error(w, http.StatusInternalServerError, 50060, "attachment signer not configured")
+		return
+	}
+	if err := h.signer.VerifyRequest(r, attachmentID); err != nil {
+		httpx.Error(w, http.StatusUnauthorized, 40116, "invalid or expired download signature")
+		return
+	}
+
+	attachment, err := h.attachments.GetByID(r.Context(), attachmentID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			httpx.Error(w, http.StatusNotFound, 40420, "attachment not found")
+			return
+		}
+		httpx.Error(w, http.StatusInternalServerError, 50055, "failed to load attachment")
+		return
+	}
+
+	h.serveAttachment(w, r, attachment)
+}
+
+// SignedURL returns a freshly minted signed download URL for an attachment
+// the caller is allowed to access. Useful when a previously embedded URL has
+// expired (e.g. the page has been open longer than the TTL).
+func (h *AttachmentHandler) SignedURL(w http.ResponseWriter, r *http.Request) {
+	user := httpx.CurrentUser(r)
+	if user == nil {
+		httpx.Error(w, http.StatusUnauthorized, 40115, "unauthorized")
+		return
+	}
+	attachmentID, ok := readAttachmentID(w, r)
+	if !ok {
+		return
+	}
+	attachment, err := h.attachments.GetByID(r.Context(), attachmentID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			httpx.Error(w, http.StatusNotFound, 40420, "attachment not found")
+			return
+		}
+		httpx.Error(w, http.StatusInternalServerError, 50055, "failed to load attachment")
+		return
+	}
+	if attachment.UserID != user.UID && !user.IsAdmin && !strings.EqualFold(user.Role, "admin") {
+		httpx.Error(w, http.StatusForbidden, 40320, "forbidden")
+		return
+	}
+
+	httpx.OK(w, map[string]any{
+		"id":          attachment.ID,
+		"downloadUrl": buildAttachmentDownloadURL(h.signer, attachment.ID),
+		"expiresIn":   int(h.signer.TTL().Seconds()),
+	}, "OK")
 }
 
 func (h *AttachmentHandler) Download(w http.ResponseWriter, r *http.Request) {
@@ -473,16 +542,24 @@ func (h *AttachmentHandler) resolveStoragePath(storagePath string) (string, erro
 	return absPath, nil
 }
 
-func presentAttachments(items []*models.RegistrationAttachment) []map[string]any {
+func (h *AttachmentHandler) presentAttachments(items []*models.RegistrationAttachment) []map[string]any {
+	return presentAttachments(h.signer, items)
+}
+
+func (h *AttachmentHandler) presentAttachment(item *models.RegistrationAttachment) map[string]any {
+	return presentAttachment(h.signer, item)
+}
+
+func presentAttachments(signer *httpx.AttachmentSigner, items []*models.RegistrationAttachment) []map[string]any {
 	out := make([]map[string]any, 0, len(items))
 	for _, item := range items {
-		out = append(out, presentAttachment(item))
+		out = append(out, presentAttachment(signer, item))
 	}
 	return out
 }
 
-func presentAttachment(item *models.RegistrationAttachment) map[string]any {
-	return map[string]any{
+func presentAttachment(signer *httpx.AttachmentSigner, item *models.RegistrationAttachment) map[string]any {
+	payload := map[string]any{
 		"id":             item.ID,
 		"registrationId": item.RegistrationID,
 		"userId":         item.UserID,
@@ -490,9 +567,20 @@ func presentAttachment(item *models.RegistrationAttachment) map[string]any {
 		"fileName":       item.FileName,
 		"mimeType":       item.MimeType,
 		"fileSize":       item.FileSize,
-		"downloadUrl":    fmt.Sprintf("/registration/attachments/%d/download", item.ID),
+		"downloadUrl":    buildAttachmentDownloadURL(signer, item.ID),
 		"createdAt":      item.CreatedAt,
 	}
+	if signer != nil {
+		payload["downloadExpiresIn"] = int(signer.TTL().Seconds())
+	}
+	return payload
+}
+
+func buildAttachmentDownloadURL(signer *httpx.AttachmentSigner, attachmentID int64) string {
+	if signer == nil {
+		return fmt.Sprintf("/registration/attachments/%d/download", attachmentID)
+	}
+	return fmt.Sprintf("/attachments/%d/download%s", attachmentID, signer.SignedQuery(attachmentID))
 }
 
 func readAttachmentID(w http.ResponseWriter, r *http.Request) (int64, bool) {
